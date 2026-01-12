@@ -1,0 +1,76 @@
+# AI小说生成工具正式版V3.0
+# 版权所有 © 2026 新疆幻城网安科技有限责任公司 (幻城科技)
+# 作者：幻城
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Gradio
+gradio_cached/
+
+# Project specific
+cache/
+exports/
+logs/
+projects/
+config/backups/
+*.log
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Configuration files with sensitive data
+.env
+config/*.json
+!config/novel_tool_config.json
+
+# Temporary files
+*.bak
+*.backup
+*.old
+
+# Documentation
+!README.md
+!OPEN_SOURCE_CHECKLIST.md
+!LICENSE
+!API_KEY_SETUP.md
+!QUICK_START.md
+!HOW_TO_EXPORT.md

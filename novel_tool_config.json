@@ -1,0 +1,32 @@
+{
+    "backend": "ollama",
+    "ollama_model": "qwen3:30b",
+    "openai_api_key": "",
+    "openai_model": "gpt-4o-mini",
+    "deepseek_api_key": "",
+    "deepseek_model": "deepseek-chat",
+    "custom_base_url": "",
+    "custom_api_key": "",
+    "custom_model": "",
+    "llamacpp_model_path": "",
+    "llamacpp_n_gpu_layers": -1,
+    "llamacpp_n_ctx": 8192,
+    "temperature": 0.8,
+    "top_p": 0.9,
+    "max_tokens": 200000,
+    "rewrite_style": "用更生动、细腻的笔触重写，语言优美，保留原意和情节，但加入更多细节描写和人物内心活动。",
+    "backends": [
+        {
+            "name": "阿里",
+            "type": "openai",
+            "base_url": "https://open.bigmodel.cn/api/paas",
+            "api_key": "e8a63d808d9c4b14aa6589bc2b36a951.RaBfBpFj46yHdJoJ",
+            "model": "glm-4.7"
+        }
+    ],
+    "chapter_target_words": 2500,
+    "writing_style": "流畅自然，情节紧凑，人物刻画细腻",
+    "writing_tone": "中性",
+    "character_development": "详细",
+    "plot_complexity": "复杂"
+}
