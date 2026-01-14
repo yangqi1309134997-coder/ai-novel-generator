@@ -39,6 +39,9 @@ cd ai小说生成工具正式版V3.0
 ```bash
 python quickstart.py
 ```
+3.申请api（重要）无api无法正常使用该项目，推荐使用在线glm 智谱清言api，本项目所有测试全程使用智谱清言api进行测试，兼容性最佳！！！
+链接：https://www.bigmodel.cn/invite?icode=noj0WqsdOw5wJyOkb5h210jPr3uHog9F4g5tjuOUqno%3D
+通过该链接注册免费送api token，并且有多款模型可以永久不限制token使用
 
 该脚本将自动完成：
 - ✅ 检查 Python 环境
@@ -391,11 +394,12 @@ pip install pytest black flake8
 
 ## 📞 联系方式
 
-- **项目主页**: [GitHub Repository]
-- **问题反馈**: [GitHub Issues]
-- **功能建议**: [GitHub Discussions]
-- **技术支持**: [Email Support]
-- **QQ群**: [群号]
+- **项目主页**: https://github.com/yangqi1309134997-coder/ai-novel-generator/
+- **问题反馈**: 1309134997@qq.com
+- **功能建议**: 1309134997@qq.com
+- **技术支持**: https://www.bilibili.com/video/BV1yarvBkEi6/?share_source=copy_web&vd_source=d7e56ff6a5e643c81fb73e628755d061
+- **官方网站**: https://hcnote.cn/
+
 
 ### 开发团队
 
@@ -437,5 +441,6 @@ SOFTWARE.
 感谢所有为这个项目做出贡献的开发者和用户！
 
 如果您觉得这个项目对您有帮助，请考虑给我们一个 ⭐ Star！
+
 
 **开始您的 AI 创作之旅吧！** 🚀✨
