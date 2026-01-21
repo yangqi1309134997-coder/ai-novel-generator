@@ -10,6 +10,13 @@
 
 AI 小说创作工具 Pro 是一个基于 Gradio 构建的现代化 Web 应用，专为小说创作者打造。集成了先进的 AI 技术，提供从零开始创作、智能重写、多格式导出到项目管理的全流程解决方案。
 有任何问题请加qq群进行反馈，由于前期比较赶工，有好多没做到位的一些小Bug，现在正在全力修复，加入交流群进行反馈，需要哪些功能也进行反馈qq群号：253193620
+##网盘下载链接
+我用夸克网盘分享了「ai-novel-generator--version-v4.0.zip」，点击链接即可保存。打开「夸克APP」，无需下载在线播放视频，畅享原画5倍速，支持电视投屏。
+链接：https://pan.quark.cn/s/e2e6872b940d
+
+通过网盘分享的文件：ai-novel-generator--version-v4.0.zip
+链接: https://pan.baidu.com/s/1NZsNkpsFKRByNBDakB3jyw?pwd=5g9a 提取码: 5g9a 
+--来自百度网盘超级会员v4的分享
 
 ### 核心特性
 
@@ -32,41 +39,102 @@ AI 小说创作工具 Pro 是一个基于 Gradio 构建的现代化 Web 应用�
 
 1. **克隆项目**
 ```bash
-git clone <repository-url>
-cd ai小说生成工具正式版V3.0
+[git clone <repository-url>](https://github.com/yangqi1309134997-coder/ai-novel-generator.git)
+cd 目录
 ```
 
-2. **运行快速初始化脚本**
-```bash
-python quickstart.py
-```
-3.申请api（重要）无api无法正常使用该项目，推荐使用在线glm 智谱清言api，本项目所有测试全程使用智谱清言api进行测试，兼容性最佳！！！
-链接：https://www.bigmodel.cn/invite?icode=noj0WqsdOw5wJyOkb5h210jPr3uHog9F4g5tjuOUqno%3D
-通过该链接注册免费送api token，并且有多款模型可以永久不限制token使用
+## 🚀 使用方法
 
-该脚本将自动完成：
-- ✅ 检查 Python 环境
-- ✅ 创建必要目录结构
-- ✅ 安装核心依赖包
-- ✅ 生成默认配置文件
-- ✅ 测试模块导入
+### 基本使用
 
-### 手动安装
-
-如果需要手动安装，请执行：
+在项目根目录下运行：
 
 ```bash
-# 安装核心依赖
-pip install gradio>=4.0.0 pandas>=2.0.0 openai>=1.0.0 python-docx>=0.8.10
-
-# 安装可选依赖（推荐）
-pip install PyMuPDF ebooklib beautifulsoup4 markdown
+python start_venv.py
 ```
 
-### 启动应用
+### Windows系统
+
+在PowerShell或CMD中：
+
+```powershell
+python start_venv.py
+```
+
+### Linux/Mac系统
+
+在终端中：
 
 ```bash
-# 启动 Web 应用
+python3 start_venv.py
+```
+
+## 📝 执行流程
+
+脚本将按以下顺序执行：
+
+1. **检查Python版本**
+   - 验证Python版本是否 >= 3.8
+   - 如果版本过低，脚本将退出并提示升级
+
+2. **检查虚拟环境**
+   - 检查venv目录是否存在
+   - 验证虚拟环境是否完整
+
+3. **创建虚拟环境**（如果需要）
+   - 使用Python内置venv模块创建虚拟环境
+   - 虚拟环境目录：`venv/`
+
+4. **检查依赖文件**
+   - 验证requirements.txt文件是否存在
+
+5. **安装依赖**
+   - 升级pip到最新版本
+   - 安装requirements.txt中的所有依赖包
+   - 首次运行可能需要几分钟
+
+6. **检查主启动文件**
+   - 验证app.py文件是否存在
+
+7. **启动应用**
+   - 使用虚拟环境中的Python运行app.py
+   - 应用将在默认端口7860启动
+## 🔧 手动操作
+
+如果自动脚本遇到问题，可以手动执行以下步骤：
+
+### 1. 创建虚拟环境
+
+```bash
+# Windows
+python -m venv venv
+
+# Linux/Mac
+python3 -m venv venv
+```
+
+### 2. 激活虚拟环境
+
+```bash
+# Windows (CMD)
+venv\Scripts\activate.bat
+
+# Windows (PowerShell)
+venv\Scripts\Activate.ps1
+
+# Linux/Mac
+source venv/bin/activate
+```
+
+### 3. 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. 启动应用
+
+```bash
 python app.py
 ```
 
@@ -445,4 +513,5 @@ SOFTWARE.
 
 
 **开始您的 AI 创作之旅吧！** 🚀✨
+
 
