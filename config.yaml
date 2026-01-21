@@ -1,0 +1,241 @@
+# AI 小说创作工具配置文件
+# 这是一个生产级配置文件模板，包含了所有必要的配置项
+
+# === 后端 API 配置 ===
+api:
+  # OpenAI 配置
+  openai:
+    enabled: true
+    api_key: "${OPENAI_API_KEY}"  # 从环境变量读取
+    base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+    model: "gpt-4"
+    max_tokens: 4000
+    timeout: 30
+    retry_attempts: 3
+    retry_delay: 1
+  
+  # GLM 配置
+  glm:
+    enabled: true
+    api_key: "${GLM_API_KEY}"
+    base_url: "${GLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}"
+    model: "glm-4"
+    max_tokens: 4000
+    timeout: 30
+    retry_attempts: 3
+    retry_delay: 1
+  
+  # Claude 配置
+  claude:
+    enabled: false
+    api_key: "${CLAUDE_API_KEY}"
+    base_url: "${CLAUDE_BASE_URL:-https://api.anthropic.com}"
+    model: "claude-3-opus-20240229"
+    max_tokens: 4000
+    timeout: 30
+    retry_attempts: 3
+    retry_delay: 1
+  
+  # 本地模型配置（如 Ollama）
+  local:
+    enabled: false
+    base_url: "${LOCAL_MODEL_URL:-http://localhost:11434}"
+    model: "llama2"
+    timeout: 60
+    retry_attempts: 3
+    retry_delay: 1
+
+# === 生成参数配置 ===
+generation:
+  # 通用生成参数
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  frequency_penalty: 0.1
+  presence_penalty: 0.1
+  
+  # 小说生成特定参数
+  novel:
+    max_chapter_length: 5000
+    min_chapter_length: 1000
+    max_paragraph_length: 300
+    dialogue_style: "modern"
+    narrative_style: "third_person"
+    genre: "fantasy"
+    writing_tone: "balanced"
+    
+  # 角色生成参数
+  character:
+    main_character_count: 3
+    supporting_character_count: 5
+    character_depth: "detailed"
+    
+  # 世界观生成参数
+  world:
+    world_building_depth: "medium"
+    magic_system: "optional"
+    technology_level: "medieval"
+
+# === 系统配置 ===
+system:
+  # 日志配置
+  logging:
+    level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    file: "logs/novel_generator.log"
+    max_file_size: "10MB"
+    backup_count: 5
+    console_output: true
+  
+  # 缓存配置
+  cache:
+    enabled: true
+    type: "file"  # file, memory, redis
+    location: "cache"
+    ttl: 3600  # 1小时
+    max_size: "100MB"
+  
+  # 并发配置
+  concurrency:
+    max_workers: 4
+    request_timeout: 30
+    rate_limit: 100  # requests per minute
+    batch_size: 5
+  
+  # 安全配置
+  security:
+    enable_cors: true
+    allowed_origins: ["*"]
+    max_request_size: "10MB"
+    enable_rate_limiting: true
+
+# === 导出配置 ===
+export:
+  # 默认格式设置
+  default_format: "markdown"
+  supported_formats: ["markdown", "pdf", "docx", "txt", "epub"]
+  
+  # 文件路径配置
+  output_directory: "output"
+  template_directory: "templates"
+  
+  # PDF 导出配置
+  pdf:
+    page_size: "A4"
+    margin: "1in"
+    font_size: 12
+    line_spacing: 1.5
+    include_toc: true
+    
+  # Word 导出配置
+  docx:
+    font_name: "宋体"
+    font_size: 12
+    line_spacing: 1.5
+    include_images: true
+    
+  # EPUB 导出配置
+  epub:
+    metadata:
+      title: "AI生成小说"
+      author: "AI小说生成器"
+      language: "zh-CN"
+    cover_image: "templates/default_cover.jpg"
+
+# === 项目管理配置 ===
+project:
+  # 自动保存配置
+  auto_save:
+    enabled: true
+    interval: 300  # 5分钟
+    backup_count: 5
+    
+  # 备份配置
+  backup:
+    enabled: true
+    location: "backups"
+    schedule: "daily"  # daily, weekly, monthly
+    keep_days: 30
+    
+  # 项目模板
+  templates:
+    enabled: true
+    location: "project_templates"
+    default_template: "standard_novel"
+    
+  # 版本控制
+  version_control:
+    enabled: false
+    auto_commit: true
+    commit_message: "Auto-save project"
+
+# === 用户界面配置 ===
+ui:
+  # 主题配置
+  theme: "light"
+  language: "zh-CN"
+  
+  # 编辑器配置
+  editor:
+    font_size: 14
+    font_family: "Microsoft YaHei, sans-serif"
+    tab_size: 2
+    word_wrap: true
+    
+  # 预览配置
+  preview:
+    auto_refresh: true
+    show_line_numbers: true
+    highlight_syntax: true
+
+# === 数据库配置 ===
+database:
+  # SQLite 配置（默认）
+  type: "sqlite"
+  path: "data/novel_generator.db"
+  
+  # MySQL 配置（可选）
+  # type: "mysql"
+  # host: "${DB_HOST:-localhost}"
+  # port: "${DB_PORT:-3306}"
+  # database: "${DB_NAME:-novel_generator}"
+  # username: "${DB_USER:-root}"
+  # password: "${DB_PASSWORD}"
+  
+  # Redis 配置（用于缓存）
+  redis:
+    host: "${REDIS_HOST:-localhost}"
+    port: "${REDIS_PORT:-6379}"
+    password: "${REDIS_PASSWORD}"
+    db: 0
+
+# === 插件配置 ===
+plugins:
+  enabled: true
+  directory: "plugins"
+  auto_load: true
+  enabled_plugins:
+    - "style_analyzer"
+    - "grammar_checker"
+    - "character_tracker"
+    - "plot_generator"
+
+# === 高级配置 ===
+advanced:
+  # 性能优化
+  performance:
+    enable_profiling: false
+    memory_limit: "1GB"
+    cpu_limit: 80
+    
+  # 调试配置
+  debug:
+    show_errors: false
+    debug_mode: false
+    trace_requests: false
+    
+  # 监控配置
+  monitoring:
+    enabled: false
+    metrics_port: 8080
+    health_check_interval: 30

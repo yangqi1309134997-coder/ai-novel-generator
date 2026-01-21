@@ -1,0 +1,191 @@
+# Docker 构建忽略文件
+# 排除不需要复制到 Docker 容器中的文件和目录
+
+# 版本控制
+.git
+.gitignore
+.gitattributes
+
+# 开发环境文件
+.env
+.env.local
+.env.*.local
+
+# Python 相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 测试文件
+tests/
+tox/
+.coverage
+.pytest_cache/
+htmlcov/
+.nox/
+
+# 文档
+docs/
+*.md
+README*
+CHANGELOG*
+CONTRIBUTING*
+
+# 日志文件
+*.log
+logs/
+log/
+
+# 缓存文件
+cache/
+*.cache
+
+# 输出文件
+output/
+generated/
+
+# 备份文件
+backups/
+*.bak
+*.backup
+
+# IDE 和编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.temp
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv/
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 上传文件
+uploads/
+static/media/
+
+# 压缩文件
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.rar
+*.7z
+
+# 其他
+*.pid
+*.sock
+*.prof
+
+# Docker 相关
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# 开发工具配置
+.pylintrc
+.pylama.ini
+.flake8
+.coveragerc
+.tox.ini
+.noxfile.py
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.env.local
+.env.*.local
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini

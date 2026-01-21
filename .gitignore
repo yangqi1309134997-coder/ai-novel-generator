@@ -1,13 +1,34 @@
+# ============================================
 # AI小说生成工具正式版V3.0
 # 版权所有 © 2026 新疆幻城网安科技有限责任公司 (幻城科技)
 # 作者：幻城
+# ============================================
 
-# Python
+# ============================================
+# 虚拟环境
+# ============================================
+venv/
+env/
+ENV/
+.venv/
+.env/
+env.bak/
+venv.bak/
+
+# ============================================
+# Python缓存
+# ============================================
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
+*.pyo
+*.pyd
 .Python
+*.so
+
+# ============================================
+# Python包管理
+# ============================================
 build/
 develop-eggs/
 dist/
@@ -23,48 +44,71 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
+
+# ============================================
+# 打包文件
+# ============================================
+*.spec
+
+# ============================================
+# 测试覆盖
+# ============================================
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
+.nox/
 .coverage.*
 coverage.xml
 *.cover
 .hypothesis/
 
-# Virtual environments
-venv/
-env/
-ENV/
-.venv/
-.env/
-
-# Gradio
-gradio_cached/
-
-# Project specific
+# ============================================
+# 项目数据
+# ============================================
 cache/
 exports/
 logs/
 projects/
 config/backups/
-*.log
-*.tmp
-*.temp
 
-# IDE
+# ============================================
+# 环境配置（包含敏感信息）
+# ============================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+config/novel_tool_config.json
+
+# ============================================
+# 临时文件
+# ============================================
+临时区/
+*.tmp
+*.log
+*.temp
+*.bak
+*.backup
+*.old
+*.cache
+0
+1
+
+# ============================================
+# IDE配置
+# ============================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
 
-# OS
+# ============================================
+# 系统文件
+# ============================================
 .DS_Store
 .DS_Store?
 ._*
@@ -73,101 +117,86 @@ config/backups/
 ehthumbs.db
 Thumbs.db
 Desktop.ini
+.fuse_hidden*
+.netrwhist
+.n*
 
-# Configuration files with sensitive data
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-config/*.json
-!config/novel_tool_config.json
-
-# Temporary files
-*.bak
-*.backup
-*.old
-*.temp
-*.cache
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.nox/
-.coverage.*
-coverage.xml
-*.cover
-.hypothesis/
-
-# Build artifacts
-build/
-dist/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
+# ============================================
 # Jupyter Notebook
+# ============================================
 .ipynb_checkpoints
 
+# ============================================
 # pyenv
+# ============================================
 .python-version
 
-# celery beat schedule file
+# ============================================
+# Celery
+# ============================================
 celerybeat-schedule
 
-# SageMath parsed files
+# ============================================
+# SageMath
+# ============================================
 *.sage.py
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
+# ============================================
+# Spyder项目设置
+# ============================================
 .spyderproject
 .spyproject
 
-# Rope project settings
+# ============================================
+# Rope项目设置
+# ============================================
 .ropeproject
 
-# mkdocs documentation
+# ============================================
+# MkDocs文档
+# ============================================
 /site
 
-# mypy
+# ============================================
+# MyPy类型检查
+# ============================================
 .mypy_cache/
 .dmypy.json
 dmypy.json
 
-# Pyre type checker
+# ============================================
+# Pyre类型检查
+# ============================================
 .pyre/
 
-# Database files
+# ============================================
+# 数据库文件
+# ============================================
 *.db
 *.sqlite
 *.sqlite3
 
-# Node.js (if any frontend components)
+# ============================================
+# Node.js（如果有前端组件）
+# ============================================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Additional system files
-.fuse_hidden*
-.netrwhist
-*~
-.n*
+# ============================================
+# Gradio缓存
+# ============================================
+gradio_cached/
 
-# Documentation
+# ============================================
+# 保留的重要文档
+# ============================================
 !README.md
 !OPEN_SOURCE_CHECKLIST.md
 !LICENSE
 !API_KEY_SETUP.md
 !QUICK_START.md
 !HOW_TO_EXPORT.md
+!.env.example
+!.env.template

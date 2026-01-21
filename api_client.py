@@ -292,19 +292,124 @@ class APIClient:
                     max_tokens=getattr(self.config.generation, "max_tokens", 512)
                 )
 
-                # 容错解析响应
+                # 增强的响应解析逻辑 - 支持多种格式，过滤状态消息
+                logger.debug(f"API响应类型: {type(response)}")
+                logger.debug(f"API响应对象: {response}")
+
                 content = ""
                 try:
-                    content = response.choices[0].message.content.strip()
-                except Exception:
-                    try:
-                        content = response.choices[0].text.strip()
-                    except Exception:
-                        content = str(response)
+                    # 尝试标准OpenAI格式
+                    if hasattr(response, 'choices') and len(response.choices) > 0:
+                        choice = response.choices[0]
+                        logger.debug(f"choice类型: {type(choice)}")
+                        logger.debug(f"choice属性: {dir(choice)}")
 
-                # 缓存结果
-                if use_cache and model:
+                        if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
+                            content = choice.message.content
+                            logger.debug(f"从message.content获取内容,长度: {len(content) if content else 0}字")
+                            logger.debug(f"内容预览: {content[:100] if content else '空'}")
+                        elif hasattr(choice, 'text'):
+                            content = choice.text
+                            logger.debug(f"从choice.text获取内容,长度: {len(content) if content else 0}字")
+                            logger.debug(f"内容预览: {content[:100] if content else '空'}")
+                        else:
+                            logger.warning(f"无法从choice获取内容,choice类型: {type(choice)}")
+                            logger.warning(f"choice属性: {dir(choice)}")
+                    else:
+                        logger.warning(f"response没有choices或为空,response类型: {type(response)}")
+                        logger.warning(f"response属性: {dir(response)}")
+
+                    # 如果标准解析失败，尝试其他可能的格式
+                    if not content or len(content.strip()) < 10:
+                        logger.warning("标准解析未获取到有效内容，尝试其他解析方式")
+
+                        # 尝试直接访问response的content属性
+                        if hasattr(response, 'content'):
+                            content = response.content
+                            logger.debug(f"从response.content获取内容,长度: {len(content) if content else 0}字")
+
+                        # 尝试从response的dict表示中提取
+                        if not content or len(content.strip()) < 10:
+                            try:
+                                response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict() if hasattr(response, 'dict') else {}
+                                logger.debug(f"响应字典: {response_dict}")
+
+                                # 尝试从choices[0].message.content提取
+                                if 'choices' in response_dict and response_dict['choices']:
+                                    msg = response_dict['choices'][0].get('message', {})
+                                    content = msg.get('content', '')
+                                    logger.debug(f"从字典提取内容,长度: {len(content) if content else 0}字")
+                            except Exception as e:
+                                logger.debug(f"尝试转换为字典失败: {e}")
+
+                        # 最后的fallback：转换为字符串，但需要过滤状态消息
+                        if not content or len(content.strip()) < 10:
+                            logger.warning("所有解析方式均未获取到有效内容，使用str(response)作为最后fallback")
+                            response_str = str(response)
+                            logger.debug(f"str(response)内容: {response_str[:200]}")
+
+                            # 过滤掉常见的状态消息
+                            status_messages = ["续写成功", "重写成功", "润色成功", "生成成功", "完成", "done", "success"]
+                            if response_str.strip() in status_messages or len(response_str.strip()) < 10:
+                                logger.error(f"API返回了状态消息而非实际内容: {response_str}")
+                                content = ""
+                            else:
+                                content = response_str
+                                logger.warning(f"使用str(response)作为fallback,长度: {len(content)}字")
+
+                    # 最终验证 - 严格过滤状态消息
+                    if content:
+                        content = content.strip()
+                        
+                        # 定义需要过滤的状态消息列表
+                        status_messages = [
+                            "续写成功", "重写成功", "润色成功", "生成成功", "完成", "done", "success",
+                            "OK", "ok", "Success", "SUCCESS", "成功", "完成",
+                            "已生成", "已重写", "已润色", "已续写"
+                        ]
+                        
+                        # 检查内容是否为状态消息
+                        if content in status_messages:
+                            logger.error(f"检测到状态消息，拒绝保存: {content}")
+                            content = ""
+                        # 检查内容长度
+                        elif len(content) < 10:
+                            logger.warning(f"获取的内容过短({len(content)}字),可能是状态消息或无效内容")
+                            logger.warning(f"内容: {content}")
+                            content = ""
+                        else:
+                            logger.info(f"成功获取内容,最终长度: {len(content)}字")
+                            logger.debug(f"内容前200字: {content[:200]}")
+                    else:
+                        logger.error("未能获取任何内容")
+
+                except Exception as e:
+                    logger.exception(f"解析API响应时发生异常: {e}")
+                    # 异常情况下也尝试获取内容
+                    try:
+                        response_str = str(response)
+                        # 过滤状态消息
+                        status_messages = ["续写成功", "重写成功", "润色成功", "生成成功", "完成", "done", "success"]
+                        if response_str.strip() not in status_messages and len(response_str.strip()) >= 10:
+                            content = response_str
+                            logger.warning(f"异常情况下使用str(response),长度: {len(content)}字")
+                        else:
+                            logger.error(f"异常情况下API返回了状态消息: {response_str}")
+                            content = ""
+                    except Exception as e2:
+                        logger.exception(f"异常情况下也无法获取内容: {e2}")
+                        content = ""
+
+                # 缓存结果 - 只缓存有效内容
+                if use_cache and model and content and len(content) >= 10:
                     self.cache.set(messages, model, content)
+                elif use_cache and model and (not content or len(content) < 10):
+                    logger.warning("内容无效，不缓存")
+
+                # 最终验证：确保content不为空且有效
+                if not content or not content.strip() or len(content.strip()) < 10:
+                    logger.error(f"内容无效或过短，拒绝返回: '{content}' (长度: {len(content) if content else 0})")
+                    return False, f"API返回了无效内容（长度: {len(content) if content else 0}字）"
 
                 logger.info(f"API调用成功: {backend.name}")
                 return True, content

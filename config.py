@@ -5,8 +5,9 @@
 作者：幻城
 """
 import json
+import yaml
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import hashlib
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 CONFIG_DIR = "config"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "novel_tool_config.json")
+CONFIG_YAML_FILE = os.path.join(CONFIG_DIR, "config.yaml")
 BACKUP_DIR = os.path.join(CONFIG_DIR, "backups")
 SECRETS_FILE = os.path.join(CONFIG_DIR, ".secrets")
 
@@ -24,6 +26,197 @@ os.makedirs(BACKUP_DIR, exist_ok=True)
 
 # 限制最大文件大小 (50MB)
 MAX_FILE_SIZE = 50 * 1024 * 1024
+
+# 支持的配置文件格式
+SUPPORTED_CONFIG_FORMATS = [".json", ".yaml", ".yml"]
+
+# API提供商配置
+API_PROVIDERS = {
+    "openai": {
+        "name": "OpenAI",
+        "default_model": "gpt-4o-mini",
+        "base_url": "https://api.openai.com/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "官方OpenAI API"
+    },
+    "openai_compatible": {
+        "name": "OpenAI（兼容接口）",
+        "default_model": "gpt-3.5-turbo",
+        "base_url": "",
+        "api_key_field": "api_key",
+        "requires_custom_url": True,
+        "description": "兼容OpenAI API格式的第三方服务"
+    },
+    "anthropic": {
+        "name": "Anthropic",
+        "default_model": "claude-3-5-sonnet-20241022",
+        "base_url": "https://api.anthropic.com",
+        "api_key_field": "x-api-key",
+        "requires_custom_url": False,
+        "description": "Claude模型"
+    },
+    "google": {
+        "name": "Google",
+        "default_model": "gemini-1.5-pro",
+        "base_url": "https://generativelanguage.googleapis.com",
+        "api_key_field": "key",
+        "requires_custom_url": False,
+        "description": "Gemini模型"
+    },
+    "alibaba": {
+        "name": "Alibaba DashScope（阿里通义）",
+        "default_model": "qwen-turbo",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Qwen系列"
+    },
+    "deepseek": {
+        "name": "DeepSeek",
+        "default_model": "deepseek-chat",
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "DeepSeek-V3"
+    },
+    "zhipu": {
+        "name": "Zhipu AI（智谱）",
+        "default_model": "glm-4",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "GLM系列"
+    },
+    "groq": {
+        "name": "Groq",
+        "default_model": "llama3-70b-8192",
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Llama3, Mixtral"
+    },
+    "together": {
+        "name": "Together AI",
+        "default_model": "meta-llama/Llama-3-70b-chat-hf",
+        "base_url": "https://api.together.xyz/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Llama, Qwen"
+    },
+    "fireworks": {
+        "name": "Fireworks AI",
+        "default_model": "accounts/fireworks/models/llama-v3-70b-instruct",
+        "base_url": "https://api.fireworks.ai/inference/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Llama, Mixtral"
+    },
+    "mistral": {
+        "name": "Mistral AI",
+        "default_model": "mistral-large-latest",
+        "base_url": "https://api.mistral.ai/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Mistral Large, Pixtral"
+    },
+    "openrouter": {
+        "name": "OpenRouter",
+        "default_model": "anthropic/claude-3.5-sonnet",
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "多模型聚合（GPT, Claude等）"
+    },
+    "deepinfra": {
+        "name": "DeepInfra",
+        "default_model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+        "base_url": "https://api.deepinfra.com/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "开源模型托管"
+    },
+    "anyscale": {
+        "name": "Anyscale Endpoints",
+        "default_model": "meta-llama/Llama-3-70b-chat-hf",
+        "base_url": "https://api.endpoints.anyscale.com/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Llama, Mistral"
+    },
+    "perplexity": {
+        "name": "Perplexity AI",
+        "default_model": "llama-3.1-sonar-small-128k-online",
+        "base_url": "https://api.perplexity.ai",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Sonar, Llama"
+    },
+    "hyperbolic": {
+        "name": "Hyperbolic",
+        "default_model": "meta-llama/Meta-Llama-3.1-70B-Instruct",
+        "base_url": "https://api.hyperbolic.xyz/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "开源模型"
+    },
+    "siliconflow": {
+        "name": "SiliconFlow（硅基流动）",
+        "default_model": "Qwen/Qwen2.5-72B-Instruct",
+        "base_url": "https://api.siliconflow.cn/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Qwen, Llama"
+    },
+    "moonshot": {
+        "name": "Moonshot AI（月之暗面Kimi）",
+        "default_model": "moonshot-v1-8k",
+        "base_url": "https://api.moonshot.ai/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Kimi系列"
+    },
+    "novita": {
+        "name": "Novita AI",
+        "default_model": "meta-llama/Meta-Llama-3.1-70B-Instruct",
+        "base_url": "https://api.novita.ai/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "开源模型托管"
+    },
+    "baichuan": {
+        "name": "Baichuan AI（百川）",
+        "default_model": "Baichuan4",
+        "base_url": "https://api.baichuan-ai.com/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Baichuan系列"
+    },
+    "cerebras": {
+        "name": "Cerebras",
+        "default_model": "llama3.1-70b",
+        "base_url": "https://api.cerebras.ai/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Llama系列"
+    },
+    "sambanova": {
+        "name": "SambaNova",
+        "default_model": "Meta-Llama-3.1-70B-Instruct",
+        "base_url": "https://api.sambanova.ai/v1",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Llama系列"
+    },
+    "volcengine": {
+        "name": "Volcengine（火山引擎/豆包）",
+        "default_model": "doubao-pro-4k",
+        "base_url": "https://ark.volcengine.com/api/v3",
+        "api_key_field": "api_key",
+        "requires_custom_url": False,
+        "description": "Doubao系列"
+    }
+}
 
 
 @dataclass
@@ -46,7 +239,8 @@ class Backend:
             return False, f"不支持的类型: {self.type}"
         if not self.base_url or not self.base_url.strip().startswith(("http://", "https://")):
             return False, "Base URL必须以http或https开头"
-        if not self.api_key or not self.api_key.strip():
+        # ollama类型允许api_key为空
+        if self.type != "ollama" and (not self.api_key or not self.api_key.strip()):
             return False, "API Key不能为空"
         if not self.model or not self.model.strip():
             return False, "模型名称不能为空"
@@ -63,8 +257,8 @@ class GenerationConfig:
     temperature: float = 0.7
     top_p: float = 0.9
     top_k: int = 40
-    max_tokens: int = 4096
-    chapter_target_words: int = 2500
+    max_tokens: int = 40960
+    chapter_target_words: int = 4000
     writing_style: str = "流畅自然，情节紧凑，人物刻画细腻"
     writing_tone: str = "中性"
     character_development: str = "详细"
@@ -78,8 +272,8 @@ class GenerationConfig:
             return False, "top_p必须在0.1-1.0之间"
         if self.max_tokens < 100 or self.max_tokens > 100000:
             return False, "max_tokens必须在100-100000之间"
-        if self.chapter_target_words < 500 or self.chapter_target_words > 10000:
-            return False, "章节目标字数必须在500-10000之间"
+        if self.chapter_target_words < 500 or self.chapter_target_words > 65536:
+            return False, "章节目标字数必须在500-65536之间"
         return True, "OK"
 
 
@@ -99,7 +293,7 @@ class ConfigManager:
         
         self.backends: List[Backend] = []
         self.generation: GenerationConfig = GenerationConfig()
-        self.version: str = "2.0.0"
+        self.version: str = "4.0.0"
         self.last_modified: str = datetime.now().isoformat()
         self._load()
         self._initialized = True
@@ -133,7 +327,7 @@ class ConfigManager:
                     except Exception as e:
                         logger.warning(f"加载生成配置失败: {e}")
                 
-                self.version = data.get("version", "2.0.0")
+                self.version = data.get("version", "4.0.0")
                 self.last_modified = data.get("last_modified", datetime.now().isoformat())
                 logger.info("配置加载成功")
             else:
@@ -256,9 +450,169 @@ class ConfigManager:
             return True, f"配置已导出至 {filepath}"
         except Exception as e:
             return False, f"导出配置失败: {str(e)}"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """将配置转换为字典格式"""
+        return {
+            "backends": [asdict(b) for b in self.backends],
+            "generation": asdict(self.generation),
+            "system": {
+                "logging": {
+                    "level": "INFO",
+                    "file": "logs/novel_generator.log",
+                    "console_output": True
+                },
+                "concurrency": {
+                    "max_workers": 4,
+                    "request_timeout": 30
+                },
+                "cache": {
+                    "enabled": True,
+                    "type": "file",
+                    "location": "cache",
+                    "ttl": 3600
+                }
+            },
+            "export": {
+                "default_format": "markdown",
+                "output_directory": "output",
+                "supported_formats": ["markdown", "pdf", "docx", "txt", "epub"]
+            },
+            "ui": {
+                "theme": "light",
+                "language": "zh-CN",
+                "editor": {
+                    "font_size": 14,
+                    "font_family": "Microsoft YaHei, sans-serif",
+                    "tab_size": 2,
+                    "word_wrap": True
+                }
+            },
+            "project": {
+                "auto_save": {
+                    "enabled": True,
+                    "interval": 300,
+                    "backup_count": 5
+                },
+                "backup": {
+                    "enabled": True,
+                    "location": "backups",
+                    "schedule": "daily",
+                    "keep_days": 30
+                },
+                "templates": {
+                    "enabled": True,
+                    "location": "project_templates",
+                    "default_template": "standard_novel"
+                }
+            },
+            "plugins": {
+                "enabled": True,
+                "directory": "plugins",
+                "auto_load": True,
+                "enabled_plugins": [
+                    "style_analyzer",
+                    "grammar_checker",
+                    "character_tracker",
+                    "plot_generator"
+                ]
+            },
+            "advanced": {
+                "performance": {
+                    "enable_profiling": False,
+                    "memory_limit": "1GB",
+                    "cpu_limit": 80
+                },
+                "debug": {
+                    "show_errors": False,
+                    "debug_mode": False,
+                    "trace_requests": False
+                },
+                "monitoring": {
+                    "enabled": False,
+                    "metrics_port": 8080,
+                    "health_check_interval": 30
+                }
+            }
+        }
+    
+    @staticmethod
+    def get_api_providers() -> Dict[str, Dict[str, Any]]:
+        """获取所有API提供商配置"""
+        return API_PROVIDERS
+    
+    @staticmethod
+    def get_api_provider_choices() -> List[str]:
+        """获取API提供商选择列表"""
+        return [provider["name"] for provider in API_PROVIDERS.values()]
+    
+    @staticmethod
+    def get_api_provider_info(provider_key: str) -> Optional[Dict[str, Any]]:
+        """根据提供商键获取提供商信息"""
+        return API_PROVIDERS.get(provider_key)
+    
+    @staticmethod
+    def get_api_provider_key_by_name(provider_name: str) -> Optional[str]:
+        """根据提供商名称获取提供商键"""
+        for key, provider in API_PROVIDERS.items():
+            if provider["name"] == provider_name:
+                return key
+        return None
 
+
+def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    加载配置文件
+    
+    Args:
+        config_path: 配置文件路径，如果为 None 则按优先级自动查找
+        
+    Returns:
+        配置字典
+        
+    Raises:
+        FileNotFoundError: 找不到配置文件
+        ValueError: 配置文件格式不支持
+    """
+    if config_path:
+        # 使用指定的配置文件
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"配置文件不存在: {config_path}")
+            
+        file_ext = os.path.splitext(config_path)[1].lower()
+        if file_ext == ".json":
+            with open(config_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        elif file_ext in [".yaml", ".yml"]:
+            with open(config_path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+        else:
+            raise ValueError(f"不支持的配置文件格式: {file_ext}")
+    else:
+        # 按优先级查找配置文件
+        config_files = [
+            CONFIG_YAML_FILE,
+            CONFIG_FILE
+        ]
+        
+        for config_file in config_files:
+            if os.path.exists(config_file):
+                file_ext = os.path.splitext(config_file)[1].lower()
+                if file_ext == ".json":
+                    with open(config_file, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                elif file_ext in [".yaml", ".yml"]:
+                    with open(config_file, "r", encoding="utf-8") as f:
+                        return yaml.safe_load(f)
+        
+        # 如果都没有找到，返回默认配置
+        return get_config().to_dict()
 
 def get_config() -> ConfigManager:
     """获取全局配置实例"""
     return ConfigManager()
+
+def get_config_manager() -> ConfigManager:
+    """获取全局配置管理器实例（别名）"""
+    return get_config()
 

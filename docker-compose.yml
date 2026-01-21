@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  # AI 小说创作工具主服务
+  novel-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: ai-novel-generator
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # 基础配置
+      - MODE=production
+      - HOST=0.0.0.0
+      - PORT=8000
+      - CONCURRENCY=4
+      
+      # 日志配置
+      - LOG_LEVEL=INFO
+      - LOG_FILE=logs/novel_generator.log
+      - CONSOLE_OUTPUT=true
+      
+      # 数据库配置
+      - DB_TYPE=sqlite
+      - DB_PATH=data/novel_generator.db
+      
+      # 缓存配置
+      - CACHE_ENABLED=true
+      - CACHE_TYPE=file
+      - CACHE_LOCATION=cache
+      - CACHE_TTL=3600
+      
+      # 安全配置
+      - ENABLE_CORS=true
+      - ALLOWED_ORIGINS=*
+      
+      # API 配置
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GLM_API_KEY=${GLM_API_KEY}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      
+      # 生成参数
+      - TEMPERATURE=0.7
+      - TOP_P=0.9
+      - MAX_TOKENS=4000
+      
+    volumes:
+      # 数据持久化
+      - ./data:/app/data
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+      - ./output:/app/output
+      - ./backups:/app/backups
+      - ./templates:/app/templates
+      - ./project_templates:/app/project_templates
+      - ./plugins:/app/plugins
+      
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+      
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+  # Redis 缓存服务（可选）
+  redis:
+    image: redis:7-alpine
+    container_name: ai-novel-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx 反向代理（可选）
+  nginx:
+    image: nginx:alpine
+    container_name: ai-novel-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - novel-generator
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/nginx_status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 数据库备份服务（可选）
+  db-backup:
+    image: alpine:latest
+    container_name: ai-novel-db-backup
+    restart: "no"
+    volumes:
+      - ./backups:/backups
+      - ./data:/data
+    depends_on:
+      - novel-generator
+    command: |
+      apk add --no-cache curl
+      while true; do
+        echo "Starting database backup..."
+        curl -X POST http://novel-generator:8000/api/backup
+        sleep 86400  # 每天备份一次
+      done
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: ai-novel-network
