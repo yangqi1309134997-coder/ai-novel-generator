@@ -14,7 +14,7 @@ AI 小说创作工具 Pro 是一个基于 Gradio 构建的现代化 Web 应用�
 在使用之前一定要先获得api，大模型api，目前本项目所有测试都在在智谱清言模型进行测试
 
 
-注册并实名领取免费ai大模型api（非常重要没有这个不能干活）：https://www.bigmodel.cn/invite?icode=7EDhDNjhUEDhrzyl5R3xP%2F2gad6AKpjZefIo3dVEQyA%3D
+注册并实名领取免费ai大模型api（非常重要没有这个不能干活）：我正在智谱大模型开放平台 BigModel.cn上打造AI应用，智谱新一代旗舰模型GLM-4.7已上线， 在推理、代码、智能体综合能力达到开源模型 SOTA 水平，通过我的邀请链接注册即可获得 2000万Tokens 大礼包，期待和你一起在BigModel上畅享卓越模型能力；链接：https://www.bigmodel.cn/invite?icode=noj0WqsdOw5wJyOkb5h210jPr3uHog9F4g5tjuOUqno%3D
 
 
 ##网盘下载链接
@@ -520,6 +520,7 @@ SOFTWARE.
 
 
 **开始您的 AI 创作之旅吧！** 🚀✨
+
 
 
 
