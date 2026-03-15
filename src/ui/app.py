@@ -1861,7 +1861,8 @@ def main():
         server_port=WEB_PORT,
         share=WEB_SHARE,
         show_error=True,
-        show_api=False  # 禁用API文档以避免gradio_client的bool类型错误
+        show_api=False,  # 禁用API文档以避免gradio_client的bool类型错误
+	inbrowser=True
     )
 
 
