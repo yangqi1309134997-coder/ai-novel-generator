@@ -78,6 +78,12 @@ projects/exports/
 novel_*/
 exports/
 
+# Build output
+build/
+dist/
+release/
+*.spec
+
 # OS
 Thumbs.db
 .DS_Store
