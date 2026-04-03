@@ -7,13 +7,15 @@
 """
 
 import logging
+import os
 import re
-from typing import List, Tuple, Optional, Dict
+from typing import Any, List, Tuple, Optional, Dict
 from pathlib import Path
 from datetime import datetime
 import json
 
 from src.core.coherence.hierarchical_summary import HierarchicalSummaryManager
+from src.core.prompts.scene_planner import ScenePlanner
 from src.core.style_optimizer import StyleOptimizer, detect_and_optimize, get_style_score
 from src.core.quality_assessor import QualityAssessor, assess_chapter_quality
 from src.core.unified_assessor import UnifiedAssessor, AITasteLevel, create_assessment_prompt
@@ -78,13 +80,13 @@ class AutoNovelGenerator:
             "enable_style_optimization": True,  # 启用风格优化
             "enable_quality_assessment": True,  # 启用质量评估
             "style_optimization_mode": "auto",  # auto/ai_off/ai_on
-            "min_quality_score": 70.0,  # 最低质量分数
+            "min_quality_score": 75.0,  # 最低质量分数
             # 新增：统一评估配置
-            "ai_taste_level": "basic",  # disabled/basic/strong
-            "quality_min_score": 70.0,  # 最低质量分
-            "quality_rewrite_threshold": 60.0,  # 质量重写阈值
-            "enable_auto_rewrite": False,  # 是否自动重写
-            "max_rewrite_attempts": 2,  # 最大重写次数
+            "ai_taste_level": "strong",  # disabled/basic/strong
+            "quality_min_score": 75.0,  # 最低质量分
+            "quality_rewrite_threshold": 68.0,  # 质量重写阈值
+            "enable_auto_rewrite": True,  # 是否自动重写
+            "max_rewrite_attempts": 3,  # 最大重写次数
         }
 
         # 生成状态
@@ -94,6 +96,42 @@ class AutoNovelGenerator:
         self.current_project_id = None
         self.current_chapter = 0
         self.total_chapters = 0
+        self.token_adjustment_factor = 1.0
+        self.context_chapter_limit = 50
+        self.adjustment_history = []
+        self._apply_runtime_flags()
+
+    @staticmethod
+    def _runtime_flag(name: str) -> bool:
+        return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _runtime_int(name: str) -> Optional[int]:
+        raw = os.getenv(name, "").strip()
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            logger.warning("Invalid integer override for %s: %s", name, raw)
+            return None
+
+    def _apply_runtime_flags(self) -> None:
+        """Allow stress-test overrides without changing the normal product path."""
+        if self._runtime_flag("NOVEL_DISABLE_CHAPTER_ASSESSMENT"):
+            self.optimization_config["enable_quality_assessment"] = False
+            self.optimization_config["enable_auto_rewrite"] = False
+            self.optimization_config["enable_style_optimization"] = False
+            self.optimization_config["ai_taste_level"] = "disabled"
+            logger.info("[stress] chapter assessment pipeline disabled by env")
+
+        if self._runtime_flag("NOVEL_DISABLE_AUTO_REWRITE"):
+            self.optimization_config["enable_auto_rewrite"] = False
+            logger.info("[stress] auto rewrite disabled by env")
+
+        target_words_override = self._runtime_int("NOVEL_TARGET_WORDS_OVERRIDE")
+        if target_words_override and target_words_override > 0:
+            logger.info("[stress] target words override enabled: %s", target_words_override)
 
     def pause_generation(self) -> None:
         """暂停生成（可继续）"""
@@ -702,13 +740,28 @@ JSON格式示例：
             context_config["context_auto_allocate"] = config.get("context_auto_allocate", True)
             context_config["prev_chapter_tail_chars"] = config.get("prev_chapter_tail_chars", 800)
 
-        # 如果上下文被禁用或模式为disabled
-        if not context_config["context_enable"] or context_config["context_mode"] == "disabled":
-            logger.info("上下文机制已关闭")
-            return "【这是第一章，直接开始创作】", True
-
         context_mode = context_config["context_mode"]
         prev_chapter_tail_chars = context_config["prev_chapter_tail_chars"]
+
+        # 如果上下文被禁用或模式为disabled，仍保留最小衔接信息，避免后续章节被误写成“第一章”
+        if not context_config["context_enable"] or context_mode == "disabled":
+            logger.info("上下文机制已关闭，使用最小衔接模式")
+            if not previous_chapters:
+                return "【这是第一章，直接开始创作】", True
+
+            last_chapter = previous_chapters[-1]
+            last_title = last_chapter.get("title", "")
+            last_content = (last_chapter.get("content", "") or "").strip()
+            last_excerpt = last_content[-prev_chapter_tail_chars:] if last_content else "上一章内容不可用，请至少延续已知设定。"
+
+            minimal_bridge = f"""【最小衔接信息】
+当前要写的是第{chapter_num}章，不是第一章。
+请延续既有角色关系、世界规则和剧情进度，不要重置设定。
+上一章：第{last_chapter.get('num', chapter_num - 1)}章《{last_title}》
+上一章结尾片段：
+{last_excerpt}
+"""
+            return minimal_bridge, True
 
         logger.info(f"第{chapter_num}章上下文设置: mode={context_mode}")
 
@@ -820,16 +873,40 @@ JSON格式示例：
 
         # 读取目标字数配置
         target_words = 3000  # 默认值
+        generation_preferences = {
+            "temperature": 0.78,
+            "writing_style": "详细生动",
+            "writing_tone": "第三人称",
+            "character_dev": "平衡发展",
+            "plot_complexity": "中等复杂",
+            "frequency_penalty": None,
+            "presence_penalty": None,
+        }
         try:
             gen_config_file = Path("config/generation_config.json")
             if gen_config_file.exists():
                 with open(gen_config_file, 'r', encoding='utf-8') as f:
                     gen_config = json.load(f)
                     target_words = gen_config.get("target_words", 3000)
+                    generation_preferences["temperature"] = gen_config.get("temperature", generation_preferences["temperature"])
+                    generation_preferences["writing_style"] = gen_config.get("writing_style", generation_preferences["writing_style"])
+                    generation_preferences["writing_tone"] = gen_config.get("writing_tone", generation_preferences["writing_tone"])
+                    generation_preferences["character_dev"] = gen_config.get("character_dev", generation_preferences["character_dev"])
+                    generation_preferences["plot_complexity"] = gen_config.get("plot_complexity", generation_preferences["plot_complexity"])
+                    generation_preferences["frequency_penalty"] = gen_config.get("frequency_penalty", None)
+                    generation_preferences["presence_penalty"] = gen_config.get("presence_penalty", None)
         except Exception as e:
             logger.warning(f"读取配置失败，使用默认值: {e}")
 
         # 重试机制（最多3次）
+        target_words_override = self._runtime_int("NOVEL_TARGET_WORDS_OVERRIDE")
+        if target_words_override and target_words_override > 0:
+            target_words = target_words_override
+
+        disable_context = self._runtime_flag("NOVEL_DISABLE_SMART_CONTEXT")
+        disable_assessment = self._runtime_flag("NOVEL_DISABLE_CHAPTER_ASSESSMENT")
+        disable_coherence_updates = self._runtime_flag("NOVEL_DISABLE_COHERENCE_UPDATES")
+
         for retry_count in range(3):
             try:
                 # 使用动态token调整
@@ -837,12 +914,48 @@ JSON格式示例：
                 logger.info(f"第{retry_count + 1}次尝试 - max_tokens={max_tokens_limit} (系数: {self.token_adjustment_factor:.3f}, 上下文: {self.context_chapter_limit}章)")
 
                 # 构建上下文（使用动态调整的上下文章节数）
-                context_text, should_generate_summary = self._build_smart_context(
-                    project_id, chapter_num, previous_chapters, max_tokens_limit
+                if disable_context:
+                    context_text = ""
+                    should_generate_summary = False
+                    coherence_info = ""
+                    previous_summary = ""
+                    project_reference = ""
+                    canonical_names = []
+                else:
+                    context_text, should_generate_summary = self._build_smart_context(
+                        project_id, chapter_num, previous_chapters, max_tokens_limit
+                    )
+
+                    # 获取连贯性信息
+                    coherence_info = self._get_coherence_context(project_id, chapter_num)
+                    previous_summary = self._get_previous_summary(previous_chapters)
+                scene_plan = ScenePlanner.plan_scenes(
+                    target_words=target_words,
+                    chapter_desc=chapter_desc,
+                    context_hint=chapter_title
+                )
+                if not disable_context:
+                    project_reference = self._build_project_reference(project_id, chapter_num)
+                    canonical_names = self._extract_canonical_names(
+                        project_reference,
+                        previous_summary,
+                        chapter_title,
+                        chapter_desc,
+                    )
+                scene_plan_text = "\n".join(
+                    [
+                        (
+                            f"{idx + 1}. {scene['name']}（约{scene['target_words']}字）\n"
+                            f"   目标：{scene['purpose']}\n"
+                            f"   要素：{', '.join(scene.get('key_elements', []))}"
+                        )
+                        for idx, scene in enumerate(scene_plan)
+                    ]
                 )
 
-                # 获取连贯性信息
-                coherence_info = self._get_coherence_context(project_id, chapter_num)
+                # 读取风格配置
+                genre = self._get_genre_from_project(project_id)
+                style_config = self._load_style_config(genre)
 
                 # 构建生成提示词
                 prompt = f"""{context_text}
@@ -855,23 +968,127 @@ JSON格式示例：
 
 {coherence_info}
 
+銆愬墠鎯呮憳瑕併€?
+{previous_summary or "鏃犻渶棰濆鎽樿锛岀洿鎺ユ壙鎺ヤ笂鏂囧嵆鍙€?"}
+
+銆愭湰绔犲満鏅鑲鍒掋€?
+{scene_plan_text}
+【项目参考卡】
+{project_reference}
+【必须保留的名称】
+{canonical_names or "如上文所示，无额外名称白名单。"}
+【命名一致性】
+如果角色设定、前文或章节大纲里已经出现角色名、地名、组织名，请原样沿用，不要自行改名、翻译、简写或中英互换。
+
+【写作基调】
+- 语言风格：{generation_preferences['writing_style']}
+- 叙述视角：{generation_preferences['writing_tone']}
+- 角色推进：{generation_preferences['character_dev']}
+- 剧情复杂度：{generation_preferences['plot_complexity']}
+
 【创作要求】
 1. 目标字数：约 {target_words} 字（可在±500字范围内浮动）
-2. 保持与前文的连贯性
-3. 角色性格和行为要一致
-4. 情节发展要自然
-5. 注意环境描写的连贯性
+2. 保持与前文的连贯性，不能重置人物关系、世界规则和剧情状态
+3. 以场景、动作、对话推动情节，不要写成提纲、总结或说明文
+4. 角色性格、目标和情绪变化要有依据，不能突然跳变
+5. 多写具体细节和感官反馈，少写空泛感叹、套路排比和模板化抒情
+6. 避免明显 AI 腔，不要频繁使用"与此同时""这一刻""然而""不由得"等机械转场
+7. 结尾要自然留下下一章推进空间，但不要直接预告"下一章将会发生什么"
+8. 直接输出小说正文，不要添加小标题、序号、括号说明或创作分析
+
+【绝对禁止使用的AI套话】
+突然、竟然、霎时间、不由得、禁不住、心中涌起、却然、陡然、
+在...的时候、随着...的发展、在...的背景下、
+不禁...了起来、一股、一股...涌上心头、眼中闪过一丝...、
+嘴角微微上扬、轻轻地点了点头、深深地吸了一口气、
+心中暗想、暗自下定决心、感受到了前所未有的...、
+仿佛...一般、宛如...似的、犹如...一样、恍如...、
+不由自主地、情不自禁地、下意识地、
+一种...的感觉、说不出的...、难以言喻的...、
+浑身一震、瞳孔骤缩、倒吸一口凉气、
+气氛突然变得...、空气中弥漫着...、
+此刻、这一刻、这一瞬间、刹那间、
+缓缓开口、沉声说道、语气坚定地说、
+目光如炬、眼中带着...的神色、
+迈着坚定的步伐、头也不回地、义无反顾地、
+与此同时、然而、只见、赫然、顿时、
+缓缓地、超乎想象、不可思议
+
+【高级写作技法】
+1. 展示而非告知：不要说"他很伤心"，而是描写"他手指微微颤抖，咖啡杯里的涟漪映着窗外的灰天"
+2. 用动作代替形容：不要说"美丽的花园"，而是写"月季爬满石墙，蜜蜂在花瓣间穿梭"
+3. 对话推动情节：每段对话至少包含一个信息增量或情感转折
+4. 感官交错：视觉、听觉、触觉、嗅觉交替使用，营造沉浸感
+5. 节奏变化：紧张段落用短句，舒缓段落用长句，避免句式单调
+6. 信息差管理：读者知道但角色不知道，或角色知道但读者不知道——制造悬念
 
 请开始创作本章内容："""
 
+                # 构建消息列表（如有风格配置则注入风格system_prompt）
+                messages = []
+
+                # 注入风格系统提示词（优先使用风格配置）
+                if style_config and style_config.get("system_prompt"):
+                    messages.append({"role": "system", "content": style_config["system_prompt"]})
+                    logger.info(f"第{chapter_num}章使用风格配置: {genre}")
+                else:
+                    messages.append({"role": "system", "content": "你是一位擅长中文长篇小说的职业作家。请直接输出自然、连贯、有场景感的正文，避免模板化总结、机械转场和明显AI痕迹。"})
+
+                messages.append({"role": "user", "content": prompt})
+
                 # 调用API生成
-                response = self.api_client.generate([
-                    {"role": "system", "content": "你是一位专业的小说作家。"},
-                    {"role": "user", "content": prompt}
-                ], temperature=0.8, max_tokens=max_tokens_limit)
+                response = self.api_client.generate(
+                    messages,
+                    temperature=generation_preferences["temperature"],
+                    max_tokens=max_tokens_limit,
+                    frequency_penalty=generation_preferences.get("frequency_penalty"),
+                    presence_penalty=generation_preferences.get("presence_penalty")
+                )
+
+                response = self._sanitize_generated_text(response)
 
                 if not response or len(response.strip()) < 100:
-                    return False, f"第{chapter_num}章生成内容过短", {}
+                    logger.warning(f"第{chapter_num}章生成内容过短，准备重试")
+                    continue
+
+                if disable_assessment:
+                    optimized_content = response
+                    actual_word_count = len(optimized_content)
+                    word_diff = actual_word_count - target_words
+                    diff_percent = abs(word_diff) / target_words * 100
+
+                    logger.info(
+                        f"[stress] 第{chapter_num}章 - 目标: {target_words}, 实际: {actual_word_count}, "
+                        f"误差: {word_diff:+d} ({diff_percent:.1f}%)"
+                    )
+                    self._adjust_token_factor(actual_word_count, target_words)
+
+                    chapter_data = {
+                        "num": chapter_num,
+                        "title": chapter_title,
+                        "desc": chapter_desc,
+                        "content": optimized_content,
+                        "word_count": actual_word_count,
+                        "generated_at": datetime.now().isoformat(),
+                        "style_report": {"score": None, "grade": "skipped", "issues_count": 0},
+                        "quality_report": {"skipped": True},
+                        "summary": ""
+                    }
+
+                    if disable_coherence_updates:
+                        logger.info("[stress] skip coherence updates for chapter %s", chapter_num)
+                    else:
+                        self._update_coherence_system(project_id, chapter_data)
+
+                    self.save_generation_cache(
+                        project_id,
+                        chapter_num,
+                        chapter_data,
+                        {"summary": chapter_data.get("summary", "")}
+                    )
+
+                    logger.info(f"[stress] 第 {chapter_num} 章生成成功，字数: {chapter_data['word_count']}")
+                    return True, f"第{chapter_num}章生成成功", chapter_data
 
                 # ========== 统一评估系统（AI去味 + 质量评估） ==========
                 # 配置统一评估器
@@ -893,6 +1110,18 @@ JSON格式示例：
 
                 # 使用优化后的内容
                 optimized_content = assessment_report.optimized_content or response
+                missing_required_names = self._find_missing_required_names(
+                    optimized_content,
+                    canonical_names
+                )
+                if missing_required_names:
+                    missing_reason = f"关键名称漂移: {', '.join(missing_required_names)}"
+                    assessment_report.need_rewrite = True
+                    assessment_report.rewrite_reason = (
+                        f"{assessment_report.rewrite_reason}; {missing_reason}"
+                        if assessment_report.rewrite_reason else missing_reason
+                    )
+                    logger.warning(f"第{chapter_num}章命名一致性检查未通过: {missing_reason}")
 
                 # 记录评估结果
                 logger.info(f"第{chapter_num}章统一评估完成:")
@@ -906,6 +1135,7 @@ JSON格式示例：
                     
                     # 执行自动重写
                     max_attempts = self.optimization_config.get("max_rewrite_attempts", 2)
+                    rewrite_content = ""
                     
                     for attempt in range(1, max_attempts + 1):
                         logger.info(f"[自动重写] 第{chapter_num}章第{attempt}次重写尝试")
@@ -922,6 +1152,7 @@ JSON格式示例：
                             chapter_desc=chapter_desc,
                             previous_chapters=previous_chapters,
                             target_words=target_words,
+                            source_content=optimized_content,
                             rewrite_prompt=rewrite_prompt,
                             attempt=attempt
                         )
@@ -942,12 +1173,29 @@ JSON格式示例：
                         logger.info(f"[自动重写] 第{attempt}次重写结果: 总分={assessment_report.total_score:.1f}")
                         
                         # 如果重写后合格，使用新内容
-                        if not assessment_report.need_rewrite:
+                        candidate_content = assessment_report.optimized_content or rewrite_content
+                        rewrite_word_count = len(candidate_content)
+                        min_acceptable_words = int(target_words * 0.75)
+                        missing_required_names = self._find_missing_required_names(
+                            candidate_content,
+                            canonical_names
+                        )
+                        if missing_required_names:
+                            missing_reason = f"关键名称漂移: {', '.join(missing_required_names)}"
+                            assessment_report.need_rewrite = True
+                            assessment_report.rewrite_reason = (
+                                f"{assessment_report.rewrite_reason}; {missing_reason}"
+                                if assessment_report.rewrite_reason else missing_reason
+                            )
+                        if not assessment_report.need_rewrite and rewrite_word_count >= min_acceptable_words:
                             logger.info(f"[自动重写] 第{chapter_num}章重写成功！")
-                            optimized_content = assessment_report.optimized_content or rewrite_content
+                            optimized_content = candidate_content
                             break
                         else:
-                            logger.warning(f"[自动重写] 第{attempt}次重写仍不合格: {assessment_report.rewrite_reason}")
+                            rewrite_reason = assessment_report.rewrite_reason
+                            if rewrite_word_count < min_acceptable_words:
+                                rewrite_reason = f"{rewrite_reason}; 字数不足 ({rewrite_word_count} < {min_acceptable_words})" if rewrite_reason else f"字数不足 ({rewrite_word_count} < {min_acceptable_words})"
+                            logger.warning(f"[自动重写] 第{attempt}次重写仍不合格: {rewrite_reason}")
                     
                     # 如果所有重写尝试都失败，使用最后一次的结果
                     if assessment_report.need_rewrite:
@@ -988,15 +1236,18 @@ JSON格式示例：
                 # 生成摘要（如果需要）
                 if should_generate_summary:
                     # 使用新的摘要生成方法，确保覆盖完整章节内容
-                    chapter_data["summary"] = self._generate_chapter_summary(response, max_length=100)
-                    logger.info(f"已生成第{chapter_num}章摘要（内容长度: {len(response)}字）")
+                    chapter_data["summary"] = self._generate_chapter_summary(optimized_content, max_length=100)
+                    logger.info(f"已生成第{chapter_num}章摘要（内容长度: {len(optimized_content)}字）")
                 else:
                     chapter_data["summary"] = ""
                     logger.info(f"全文模式跳过摘要生成")
 
                 # 更新连贯性系统
                 logger.info(f"准备更新连贯性系统: 第{chapter_num}章（连贯性系统存在: {self.character_tracker is not None}）")
-                self._update_coherence_system(project_id, chapter_data)
+                if disable_coherence_updates:
+                    logger.info("[stress] skip coherence updates for chapter %s", chapter_num)
+                else:
+                    self._update_coherence_system(project_id, chapter_data)
 
                 # 保存缓存
                 self.save_generation_cache(
@@ -1132,6 +1383,7 @@ JSON格式示例：
         chapter_desc: str,
         previous_chapters: List[Dict],
         target_words: int,
+        source_content: str,
         rewrite_prompt: str,
         attempt: int
     ) -> Optional[str]:
@@ -1164,9 +1416,10 @@ JSON格式示例：
                 previous_chapters=previous_chapters,
                 max_tokens=adjusted_max_tokens
             )
+            project_reference = self._build_project_reference(project_id, chapter_num)
+            canonical_names = self._extract_canonical_names(project_reference, source_content, chapter_title, chapter_desc)
             
             # 获取提示词模板
-            prompt_template = self.prompt_manager.get_prompt("chapter_generation")
             
             logger.info(f"[自动重写] 第{attempt}次尝试 - max_tokens={adjusted_max_tokens} (系数: {self.token_adjustment_factor:.3f})")
             
@@ -1174,6 +1427,20 @@ JSON格式示例：
             rewrite_system_prompt = f"""你是一个专业的小说作家，正在重写第{chapter_num}章。
 
 {rewrite_prompt}
+【重写硬约束】
+1. 必须保留原文中的题材、角色身份、核心冲突和关键线索。
+2. 只允许优化表达和结构，不允许把当前章节改写成另一个故事。
+3. 原文里已经出现的角色名、地名和组织名必须保持一致。
+
+銆愬緟淇鍘熸枃銆?
+{source_content}
+【项目参考卡】
+{project_reference}
+
+銆愪笉鍙繚鑳岀殑绾︽潫銆?
+1. 蹇呴』淇濇寔褰撳墠绔犺妭鐨勯鏉愩€佹椂浠ｃ€佷富瑕佷汉鐗┿€佽韩浠藉拰鍦扮偣锛屼笉瑕佹崲涓€涓晠浜嬮噸鍐?
+2. 涓嶈鑷繁鏂板涓庡綋鍓嶅ぇ绾叉棤鍏崇殑涓昏銆佷笘鐣岃鎴栦富绾垮啿绐?
+3. 閲嶅啓鐨勭洰鐨勬槸鈥滄妸鍘熸湁鍐呭鍐欏緱鏇村ソ鈥濓紝涓嶆槸鎹㈡垚鍙︿竴绡囧皬璇?
 
 请根据以上问题重新创作本章，注意：
 1. 严格控制在{target_words}字左右（误差不超过±200字）
@@ -1191,6 +1458,8 @@ JSON格式示例：
 
 【前文上下文】
 {context_text}
+銆愬緟淇鍘熸枃銆?
+{source_content}
 
 【重写要求】
 {rewrite_prompt}
@@ -1204,7 +1473,10 @@ JSON格式示例：
             ], temperature=0.8, max_tokens=adjusted_max_tokens)
             
             # 清理响应
-            content = response.strip()
+            content = self._sanitize_generated_text(response)
+            if not content:
+                logger.warning(f"[自动重写] 第{attempt}次未获得有效正文，返回重试")
+                return None
             
             # 检查字数
             actual_words = len(content)
@@ -1221,6 +1493,171 @@ JSON格式示例：
         except Exception as e:
             logger.error(f"[自动重写] 第{attempt}次重写失败: {e}", exc_info=True)
             return None
+
+    def _extract_canonical_names(self, *texts: str) -> str:
+        """Extract stable Latin-script names that should not be translated or renamed."""
+        candidates: List[str] = []
+        stopwords = {"API", "JSON", "Word", "Markdown", "HTML", "TXT", "Lin".upper()}
+
+        for text in texts:
+            if not text:
+                continue
+            for token in re.findall(r"\b[A-Z][A-Za-z0-9_-]{1,}\b", str(text)):
+                if token.upper() in stopwords:
+                    continue
+                if token not in candidates:
+                    candidates.append(token)
+
+        if "Lin" in " ".join(texts) and "Lin" not in candidates:
+            candidates.insert(0, "Lin")
+
+        return ", ".join(candidates[:12])
+
+    def _find_missing_required_names(self, content: str, canonical_names: str) -> List[str]:
+        """Return required Latin-script names that disappeared from the generated text."""
+        if not canonical_names:
+            return []
+
+        missing: List[str] = []
+        required_names = [name.strip() for name in canonical_names.split(",") if name.strip()]
+        normalized_content = content or ""
+
+        for name in required_names:
+            if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", name) and name not in normalized_content:
+                missing.append(name)
+
+        return missing
+
+    def _build_project_reference(self, project_id: str, chapter_num: int) -> str:
+        """Load stable project metadata to reduce naming and setting drift."""
+        try:
+            project_file = self.project_dir / f"{project_id}.json"
+            if not project_file.exists():
+                return "无额外项目参考。"
+
+            project = json.loads(project_file.read_text(encoding="utf-8"))
+            outline = project.get("outline", [])
+            current_outline = next((item for item in outline if item.get("num") == chapter_num), {})
+
+            parts = [
+                f"项目标题：{project.get('title', '')}",
+                f"题材类型：{project.get('genre', '')}",
+                f"角色设定：{project.get('character_setting', '')}",
+                f"世界设定：{project.get('world_setting', '')}",
+                f"主线构思：{project.get('plot_idea', '')}",
+            ]
+
+            if current_outline:
+                parts.append(f"当前章节标题：{current_outline.get('title', '')}")
+                parts.append(f"当前章节大纲：{current_outline.get('description', '')}")
+
+            return "\n".join(part for part in parts if part and not part.endswith("："))
+        except Exception as exc:
+            logger.warning(f"读取项目参考失败: {exc}")
+            return "无额外项目参考。"
+
+    def _load_style_config(self, genre: str) -> Optional[Dict]:
+        """加载风格配置
+
+        根据小说类型(genre)匹配对应的风格提示词JSON文件，
+        返回风格配置字典，无匹配时返回None。
+        """
+        genre_map = {
+            "玄幻": "xuanhuan", "仙侠": "xuanhuan",
+            "都市": "dushi_romance", "言情": "dushi_romance",
+            "悬疑": "xuanyi", "推理": "xuanyi",
+            "历史": "lishi", "穿越": "lishi",
+            "科幻": "kehuan",
+            "武侠": "wuxia",
+            "现实": "xianshi",
+            "轻小说": "qingxiaoshuo",
+        }
+        style_id = genre_map.get(genre)
+        if not style_id:
+            return None
+        style_path = Path("config/style_prompts") / f"{style_id}.json"
+        if not style_path.exists():
+            return None
+        try:
+            with open(style_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as exc:
+            logger.warning(f"加载风格配置失败 ({genre}/{style_id}): {exc}")
+            return None
+
+    def _get_genre_from_project(self, project_id: str) -> str:
+        """从项目文件中读取题材类型"""
+        try:
+            project_file = self.project_dir / f"{project_id}.json"
+            if project_file.exists():
+                project = json.loads(project_file.read_text(encoding="utf-8"))
+                return project.get("genre", "")
+        except Exception:
+            pass
+        return ""
+
+    @staticmethod
+    def _extract_message_content(response: Any) -> str:
+        """Extract assistant text from SDK objects, dict payloads, or content blocks."""
+        if response is None:
+            return ""
+
+        if isinstance(response, str):
+            return response.strip()
+
+        if isinstance(response, dict):
+            choices = response.get("choices") or []
+            if choices:
+                message = choices[0].get("message") or {}
+                content = message.get("content")
+                if isinstance(content, list):
+                    parts = []
+                    for item in content:
+                        if isinstance(item, dict):
+                            text = item.get("text") or item.get("content") or ""
+                            if text:
+                                parts.append(str(text))
+                    return "".join(parts).strip()
+                if content:
+                    return str(content).strip()
+            content = response.get("content")
+            if content:
+                return str(content).strip()
+            return ""
+
+        choices = getattr(response, "choices", None)
+        if choices:
+            first_choice = choices[0]
+            message = getattr(first_choice, "message", None)
+            if message is not None:
+                content = getattr(message, "content", None)
+                if isinstance(content, list):
+                    parts = []
+                    for item in content:
+                        text = getattr(item, "text", None)
+                        if text:
+                            parts.append(str(text))
+                    return "".join(parts).strip()
+                if content:
+                    return str(content).strip()
+
+        content = getattr(response, "content", None)
+        if content:
+            return str(content).strip()
+
+        return str(response).strip()
+
+    def _sanitize_generated_text(self, response) -> str:
+        """Normalize SDK responses into plain chapter text."""
+        text = self._extract_message_content(response)
+        if not text:
+            return ""
+
+        if text.startswith("ChatCompletion(") or "ChatCompletionMessage(" in text:
+            logger.warning("检测到非正文的 SDK 对象字符串，按空结果处理")
+            return ""
+
+        return text
 
     def _get_previous_summary(self, previous_chapters: List[Dict]) -> str:
         """
@@ -1896,7 +2333,7 @@ def create_auto_generation_ui(
                         ("基础去味", "basic"),
                         ("强力去味", "strong")
                     ],
-                    value="basic",
+                    value="strong",
                     label="AI去味等级",
                     info="基础：本地自动修正 | 强力：AI辅助优化"
                 )
@@ -1913,7 +2350,7 @@ def create_auto_generation_ui(
                 auto_quality_min_score = gr.Slider(
                     minimum=50,
                     maximum=90,
-                    value=70,
+                    value=75,
                     step=5,
                     label="最低质量分",
                     info="低于此分数会标记为需要改进"
@@ -1923,7 +2360,7 @@ def create_auto_generation_ui(
                 auto_quality_rewrite_threshold = gr.Slider(
                     minimum=40,
                     maximum=70,
-                    value=60,
+                    value=68,
                     step=5,
                     label="重写阈值",
                     info="低于此分数建议重写章节"
@@ -1931,7 +2368,7 @@ def create_auto_generation_ui(
         
         with gr.Row():
             auto_enable_auto_rewrite = gr.Checkbox(
-                value=False,
+                value=True,
                 label="自动重写不合格章节",
                 info="当质量分低于重写阈值时自动重写"
             )
@@ -1939,7 +2376,7 @@ def create_auto_generation_ui(
             auto_max_rewrite_attempts = gr.Slider(
                 minimum=1,
                 maximum=5,
-                value=2,
+                value=3,
                 step=1,
                 label="最大重写次数",
                 info="最多尝试重写几次"

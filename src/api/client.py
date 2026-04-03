@@ -55,6 +55,18 @@ class ResponseCache:
         content = json.dumps(messages, sort_keys=True, ensure_ascii=False) + model
         return hashlib.md5(content.encode('utf-8')).hexdigest()
 
+    @staticmethod
+    def _is_invalid_cached_value(value: str) -> bool:
+        """Reject SDK repr strings and empty cache entries."""
+        if not value:
+            return True
+
+        text = str(value).strip()
+        if not text:
+            return True
+
+        return text.startswith("ChatCompletion(") or "ChatCompletionMessage(" in text
+
     def get(self, messages: List[Dict], model: str) -> Optional[str]:
         """获取缓存"""
         key = self._generate_key(messages, model)
@@ -65,6 +77,9 @@ class ResponseCache:
                 # 检查是否过期
                 if datetime.now() - entry.timestamp < timedelta(seconds=entry.ttl):
                     logger.debug(f"缓存命中: {key}")
+                    if self._is_invalid_cached_value(entry.value):
+                        del self.cache[key]
+                        return None
                     return entry.value
                 else:
                     del self.cache[key]
@@ -81,6 +96,9 @@ class ResponseCache:
                 oldest_key = min(self.cache.keys(),
                                key=lambda k: self.cache[k].timestamp)
                 del self.cache[oldest_key]
+
+            if self._is_invalid_cached_value(value):
+                return
 
             self.cache[key] = CacheEntry(
                 key=key,
@@ -131,9 +149,12 @@ class ResponseCache:
                         ts = datetime.fromisoformat(v.get("timestamp"))
                     except Exception:
                         ts = datetime.now()
+                    value = v.get("value", "")
+                    if self._is_invalid_cached_value(value):
+                        continue
                     loaded[k] = CacheEntry(
                         key=k,
-                        value=v.get("value", ""),
+                        value=value,
                         timestamp=ts,
                         ttl=int(v.get("ttl", 3600))
                     )
@@ -340,7 +361,9 @@ class UnifiedAPIClient:
         temperature: float = 0.8,
         max_tokens: int = 4000,
         use_cache: Optional[bool] = None,
-        max_retries: Optional[int] = None
+        max_retries: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None
     ) -> str:
         """
         生成文本
@@ -352,6 +375,8 @@ class UnifiedAPIClient:
             max_tokens: 最大token数
             use_cache: 是否使用缓存
             max_retries: 最大重试次数（可选，优先使用配置文件中的值）
+            frequency_penalty: 频率惩罚参数（可选，降低重复词汇出现频率）
+            presence_penalty: 存在惩罚参数（可选，鼓励引入新话题）
 
         Returns:
             生成的文本
@@ -415,12 +440,20 @@ class UnifiedAPIClient:
                 }
 
                 # 调用API
-                response = connection.client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens
-                )
+                request_kwargs = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+                if frequency_penalty is not None:
+                    request_kwargs["frequency_penalty"] = frequency_penalty
+                if presence_penalty is not None:
+                    request_kwargs["presence_penalty"] = presence_penalty
+                if "bigmodel.cn" in str(connection.config.base_url) and str(model).startswith("glm-4.7"):
+                    request_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+
+                response = connection.client.chat.completions.create(**request_kwargs)
 
                 # 计算耗时
                 duration_ms = (time.time() - start_time) * 1000
@@ -430,6 +463,9 @@ class UnifiedAPIClient:
 
                 if not content:
                     raise Exception("API返回空内容")
+
+                # AI套话后处理过滤
+                content = self._filter_ai_cliches(content)  # noqa: use the method below
 
                 # 保存到缓存
                 if use_cache:
@@ -509,6 +545,22 @@ class UnifiedAPIClient:
         # 所有重试失败
         raise Exception(f"生成失败，已重试{max_retries}次: {last_error}")
 
+    def _filter_ai_cliches(self, text: str) -> str:
+        """后处理过滤AI套话，用自然替代词替换"""
+        replacements = {
+            '深吸一口气': '缓缓吐出一口浊气',
+            '眉头紧锁': '眉头微蹙',
+            '瞳孔骤缩': '目光一凝',
+            '嘴角上扬': '微微勾起唇角',
+            '心中涌起': '心底浮上',
+            '不由得': '',
+            '赫然': '明明白白地',
+            '不禁': '',
+        }
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        return text
+
     def _parse_response(self, response) -> str:
         """
         解析API响应
@@ -528,6 +580,8 @@ class UnifiedAPIClient:
 
                 if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
                     content = choice.message.content
+                    if (not content or len(str(content).strip()) < 10) and hasattr(choice.message, 'reasoning_content'):
+                        content = choice.message.reasoning_content
                 elif hasattr(choice, 'text'):
                     content = choice.text
 
@@ -542,7 +596,7 @@ class UnifiedAPIClient:
                     response_dict = response.model_dump() if hasattr(response, 'model_dump') else {}
                     if 'choices' in response_dict and response_dict['choices']:
                         msg = response_dict['choices'][0].get('message', {})
-                        content = msg.get('content', '')
+                        content = msg.get('content', '') or msg.get('reasoning_content', '')
                 except Exception:
                     pass
 
@@ -638,9 +692,21 @@ def get_api_client() -> Optional[UnifiedAPIClient]:
         UnifiedAPIClient实例，如果配置无效则返回None
     """
     try:
-        # 从配置文件加载
-        config_file = Path("config/user_config.json")
-        if not config_file.exists():
+        # 从配置文件加载 - 支持多种路径
+        possible_paths = [
+            Path("config/user_config.json"),  # 当前目录
+            Path(__file__).parent.parent.parent / "config" / "user_config.json",  # 相对于src/api/client.py
+            Path.cwd() / "config" / "user_config.json",  # 当前工作目录
+        ]
+
+        config_file = None
+        for path in possible_paths:
+            if path.exists():
+                config_file = path
+                break
+
+        if not config_file:
+            logger.warning(f"未找到配置文件，尝试的路径: {[str(p) for p in possible_paths]}")
             return None
 
         with open(config_file, 'r', encoding='utf-8') as f:

@@ -20,62 +20,6 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-ENV/
-env/
-.venv
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Logs
-logs/*.log
-logs/api_samples/*.jsonl
-*.log
-
-# Cache
-cache/*
-!cache/.gitkeep
-
-# Projects (user data)
-projects/*.json
-!projects/.gitkeep
-
-# Config (user data)
-config/*.yaml
-!config/config.yaml.example
-
-# Data
-data/*
-!data/.gitkeep
-
-# Exports
-exports/*
-!exports/.gitkeep
-
-# Test
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Temporary files
-*.tmp
-*.bak
-*.backup
-*.swp
-临时区/
-
 # Build
 *.spec
 build/
@@ -87,3 +31,53 @@ dist/
 # Environment
 .env
 .env.local
+frontend-web/.env
+frontend-web/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test artifacts
+test-results/
+tests/screenshots_*/
+tests/*.json
+tests/*.docx
+tests/*.js
+
+# Logs
+logs/*.log
+logs/*.json
+logs/api_samples/
+*.log
+
+# Runtime data
+projects/*.json
+
+# Node
+node_modules/
+package.json
+package-lock.json
+
+# Cache
+cache/
+.pytest_cache/
+
+# Data (runtime generated)
+data/
+projects/exports/
+
+# Development tools
+.serena/
+.codeartsdoer/
+
+# Generated novel output
+novel_*/
+exports/
+
+# OS
+Thumbs.db
+.DS_Store

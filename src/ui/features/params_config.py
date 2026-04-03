@@ -19,8 +19,8 @@ CONFIG_FILE = Path("config/generation_config.json")
 
 # 默认配置 - 针对小说生成优化的最佳值
 DEFAULT_CONFIG = {
-    "temperature": 0.85,  # 稍高的随机性，让小说更有创意
-    "top_p": 0.92,  # 核采样，保持内容连贯性的同时允许多样性
+    "temperature": 0.78,  # 降低过度发散，兼顾创意与稳定性
+    "top_p": 0.90,  # 保持词汇多样性，同时减少漂移
     "top_k": 50,  # 稍宽的候选词范围
     "max_tokens": 20000,  # 默认20K，支持长章节生成
     "target_words": 3000,  # 每章目标字数
@@ -31,7 +31,7 @@ DEFAULT_CONFIG = {
     # 上下文管理配置
     "context_enable": True,  # 启用上下文机制
     "context_mode": "summary",  # 上下文模式: summary(摘要), full(全文), disabled(关闭)
-    "context_max_chapters": 50,  # 最大使用前面多少章作为上下文
+    "context_max_chapters": 60,  # 最大使用前面多少章作为上下文
     "context_auto_allocate": True  # 自动分配token（不超过max_tokens）
 }
 

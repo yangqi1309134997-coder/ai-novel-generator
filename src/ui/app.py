@@ -38,6 +38,7 @@ from .features import (
     create_auto_generation_ui,
     AutoNovelGenerator
 )
+from .features.snowflake_generator import create_snowflake_ui
 from .components.coherence_viz import CoherenceVizUI
 
 # ==================== 日志配置 ====================
@@ -113,6 +114,123 @@ WEB_HOST = os.getenv("NOVEL_TOOL_HOST", "0.0.0.0")
 WEB_PORT = int(os.getenv("NOVEL_TOOL_PORT", os.getenv("PORT", "7860")))
 WEB_SHARE = os.getenv("NOVEL_TOOL_SHARE", "false").lower() in ("1", "true", "yes")
 
+MAIN_APP_CSS = """
+.gradio-container {
+    background:
+        radial-gradient(circle at top right, rgba(15, 118, 110, 0.12), transparent 30%),
+        linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+}
+
+.app-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.app-hero {
+    padding: 28px 32px;
+    border-radius: 24px;
+    background: linear-gradient(135deg, #0f172a 0%, #134e4a 100%);
+    color: #f8fafc;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+}
+
+.app-hero__eyebrow {
+    margin: 0 0 12px;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(226, 232, 240, 0.78);
+}
+
+.app-hero h1 {
+    margin: 0;
+    font-size: 2.4rem;
+    line-height: 1.1;
+}
+
+.app-hero p {
+    margin: 14px 0 0;
+    max-width: 880px;
+    font-size: 1rem;
+    color: rgba(241, 245, 249, 0.88);
+}
+
+.app-quick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+}
+
+.app-quick-card {
+    padding: 18px 20px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.app-quick-card strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #0f172a;
+    font-size: 1rem;
+}
+
+.app-quick-card span {
+    color: #475569;
+    font-size: 0.94rem;
+    line-height: 1.5;
+}
+
+.app-note {
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.76);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    color: #334155;
+}
+
+.app-note strong {
+    color: #0f172a;
+}
+
+.mode-summary {
+    margin-bottom: 14px;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(255, 251, 235, 0.95), rgba(240, 253, 250, 0.95));
+    border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.mode-summary p {
+    margin: 0;
+    color: #334155;
+    line-height: 1.6;
+}
+
+.workspace-panel {
+    padding: 10px 2px 0;
+}
+
+.workspace-panel h3 {
+    margin-top: 0;
+}
+
+.app-footer {
+    margin-top: 12px;
+    padding: 18px 10px 6px;
+    text-align: center;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.app-footer strong {
+    color: #0f172a;
+}
+"""
+
 
 # ==================== 全局状态管理 ====================
 
@@ -145,6 +263,10 @@ class AppState:
 
         # 项目管理器
         self.project_dir = Path("projects")
+        # 项目管理器（雪花写作法）
+        from src.core.prompts.snowflake import SnowflakeManager
+        self.project_manager = SnowflakeManager
+
         self.project_dir.mkdir(exist_ok=True)
 
     def init_coherence_systems(self, project_id: str):
@@ -1329,59 +1451,95 @@ def create_prompt_editor_ui():
 
 def create_main_ui():
     """创建主界面"""
+    if not app_state.auto_generator:
+        app_state.init_auto_generator()
+
+    coherence_system = {
+        "character_tracker": app_state.character_tracker,
+        "plot_manager": app_state.plot_manager,
+        "world_db": app_state.world_db
+    }
+
+    project_choices_for_dropdown = []
+    project_choices = {}
+    export_project_choices = []
+
+    try:
+        from project_manager import ProjectManager
+        projects_list = ProjectManager.list_projects()
+        project_choices_for_dropdown = [p["title"] for p in projects_list]
+        project_choices = {p["id"]: p["title"] for p in projects_list}
+        export_project_choices = list(project_choices_for_dropdown)
+        logger.info(f"[主界面] 预加载了 {len(projects_list)} 个项目")
+    except Exception as e:
+        logger.error(f"[主界面] 预加载项目失败: {e}", exc_info=True)
+
+    configured_providers = 0
+    config_file = Path("config/user_config.json")
+    if config_file.exists():
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                configured_providers = len(json.load(f).get("providers", []))
+        except Exception as e:
+            logger.warning(f"[主界面] 读取接口配置数量失败: {e}")
+
     with gr.Blocks(title="AI Novel Generator 4.5") as app:
-        # 项目介绍头部
-        gr.Markdown("""
-        <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; margin-bottom: 20px;">
-            <h1 style="color: white; margin: 0; font-size: 2.5em;">🚀 AI小说生成器 4.5</h1>
-            <h3 style="color: #f0f0f0; margin: 10px 0 0 0;">智能连贯性系统 | 22+ API提供商 | 灵活提示词管理</h3>
-            <p style="color: #e0e0e0; margin: 10px 0 0 0; font-size: 1.1em;">
-                一款功能强大的AI辅助小说创作工具，帮助作者高效创作高质量小说
-            </p>
+        gr.HTML(f"""
+        <div class="app-shell">
+            <section class="app-hero">
+                <p class="app-hero__eyebrow">AI Novel Generator 4.5</p>
+                <h1>把零散功能收束成一条清晰的创作路径</h1>
+                <p>现在的主界面按用户任务重新组织：先确定是单章续写还是整本生成，再进入优化分析、项目中心和系统设置。自动生成与雪花写作不再分散在不同区域，而是在同一块整本生成工作台里直接切换。</p>
+            </section>
+            <section class="app-quick-grid">
+                <div class="app-quick-card">
+                    <strong>当前项目</strong>
+                    <span>{len(project_choices_for_dropdown)} 个项目已加载，适合继续续写、重写与导出。</span>
+                </div>
+                <div class="app-quick-card">
+                    <strong>接口状态</strong>
+                    <span>{configured_providers} 个 API 提供商已就绪，生成链路可直接测试。</span>
+                </div>
+                <div class="app-quick-card">
+                    <strong>整本生成</strong>
+                    <span>快速模式适合直接开写，规划模式适合先做结构化蓝图。</span>
+                </div>
+                <div class="app-quick-card">
+                    <strong>优化节奏</strong>
+                    <span>生成后统一进入润色、重写、连贯性分析和提示词调整，不再到处找入口。</span>
+                </div>
+            </section>
         </div>
         """)
-        
-        gr.Markdown("### 智能连贯性系统 + 22+提供商支持")
 
         with gr.Tabs():
-            # Tab 1: 小说创作
-            with gr.Tab("📖 小说创作"):
+            with gr.Tab("✍️ 创作工作台"):
+                gr.HTML("""
+                <div class="app-note">
+                    <strong>推荐路径：</strong>先进入「整本生成」确定模式和项目，再回到「单章续写」做定向补写。这样上下文、项目状态和导出链路都保持在一处。
+                </div>
+                """)
+
                 with gr.Tabs():
-                    # 子标签1: 单章创作
-                    with gr.Tab("📝 单章创作"):
-                        gr.Markdown("### 📌 选择项目")
-                        gr.Markdown("为已有项目逐个生成章节。如需创建新项目，请使用「🚀 自动生成整本小说」标签。")
+                    with gr.Tab("📝 单章续写"):
+                        gr.Markdown("### 选择已有项目并继续写作")
+                        gr.Markdown("这里专门处理已有项目的章节补写与续写，避免和整本生成混在一起。")
 
-                        # 项目选择区域
                         with gr.Row():
-                            # 获取项目列表
-                            project_choices_for_dropdown = []
-                            try:
-                                from project_manager import ProjectManager
-                                projects_list = ProjectManager.list_projects()
-                                project_choices_for_dropdown = [p["title"] for p in projects_list]
-                                logger.info(f"[单章创作] 加载了 {len(project_choices_for_dropdown)} 个项目")
-                            except Exception as e:
-                                logger.error(f"获取项目列表失败: {e}", exc_info=True)
-                                project_choices_for_dropdown = []
-
                             project_selector = gr.Dropdown(
                                 choices=project_choices_for_dropdown,
                                 value=project_choices_for_dropdown[0] if project_choices_for_dropdown else None,
                                 label="选择项目",
-                                info="选择要操作的项目",
+                                info="选择要续写的项目",
                                 interactive=True
                             )
 
-                        # 项目信息显示
                         project_info_display = gr.Markdown("""
-                        **提示**：请先选择一个项目，或前往「🚀 自动生成整本小说」创建新项目
+                        **提示**：请先选择一个项目，或切换到「整本生成」创建新项目
                         """)
 
                         gr.Markdown("---")
-
-                        # 章节生成区域
-                        gr.Markdown("### ✍️ 章节生成")
+                        gr.Markdown("### 章节生成")
 
                         with gr.Row():
                             generation_style = gr.Dropdown(
@@ -1432,9 +1590,8 @@ def create_main_ui():
 
                         generate_btn = gr.Button("🚀 生成章节", variant="primary", size="lg")
 
-                        # 生成结果
                         gr.Markdown("---")
-                        gr.Markdown("### 📄 生成结果")
+                        gr.Markdown("### 生成结果")
 
                         with gr.Row():
                             generate_status = gr.Textbox(
@@ -1460,52 +1617,63 @@ def create_main_ui():
                             interactive=False
                         )
 
-                    # 子标签2: 自动生成整本小说
-                    with gr.Tab("🚀 自动生成整本小说"):
-                        gr.Markdown("### 📖 一键生成完整小说")
-                        gr.Markdown("填写基本信息 → 指定章节数 → 自动生成整本小说，集成缓存、上下文、连贯性系统")
+                    with gr.Tab("📚 整本生成"):
+                        gr.HTML("""
+                        <div class="mode-summary">
+                            <p><strong>整本生成模式切换：</strong>快速模式适合直接输入设定后一键连续生成。规划模式适合先做雪花架构和章节蓝图，再逐章推进。两种模式现在集中在同一个工作台里，不再分散在不同导航区域。</p>
+                        </div>
+                        """)
 
-                        # 初始化自动生成器（如果还没有）
-                        if not app_state.auto_generator:
-                            app_state.init_auto_generator()
+                        generation_mode = gr.Radio(
+                            choices=["快速模式（自动生成）", "规划模式（雪花写作）"],
+                            value="快速模式（自动生成）",
+                            label="生成模式",
+                            info="根据你的创作方式直接切换"
+                        )
 
-                        if app_state.auto_generator:
-                            # 获取项目列表用于加载（使用project_id作为唯一标识）
-                            project_choices = {}  # {project_id: title}
-                            try:
-                                from project_manager import ProjectManager
-                                projects = ProjectManager.list_projects()
-                                # 使用project_id作为key，避免同名项目冲突
-                                project_choices = {p["id"]: p["title"] for p in projects}
-                                logger.info(f"加载了 {len(project_choices)} 个项目")
-                            except Exception as e:
-                                logger.warning(f"获取项目列表失败: {e}")
+                        with gr.Group(visible=True, elem_classes="workspace-panel") as auto_generation_panel:
+                            gr.Markdown("### 快速模式")
+                            gr.Markdown("适合已有题材和设定，直接生成大纲、章节和项目进度。")
 
-                            auto_tab = create_auto_generation_ui(app_state, app_state.auto_generator, project_choices)
-                        else:
-                            gr.Markdown("❌ 自动生成器未初始化，请先配置API")
+                            if app_state.auto_generator:
+                                auto_tab = create_auto_generation_ui(app_state, app_state.auto_generator, project_choices)
+                            else:
+                                gr.Markdown("❌ 自动生成器未初始化，请先在系统设置中配置 API。")
 
-            # Tab 2: 小说重写
-            with gr.Tab("📝 小说重写"):
-                rewrite_tab = create_rewrite_ui(app_state)
+                        with gr.Group(visible=False, elem_classes="workspace-panel") as snowflake_generation_panel:
+                            gr.Markdown("### 规划模式")
+                            gr.Markdown("适合先推导核心种子、人物动力和章节蓝图，再进入章节创作。")
+                            snowflake_tab = create_snowflake_ui(
+                                app_state.api_client,
+                                app_state.project_manager,
+                                app_state.auto_generator,
+                                coherence_system
+                            )
 
-            # Tab 3: 小说润色
-            with gr.Tab("✨ 小说润色"):
-                polish_tab = create_polish_ui(app_state)
+            with gr.Tab("🛠️ 优化与分析"):
+                gr.HTML("""
+                <div class="app-note">
+                    <strong>这一区只做优化闭环：</strong>生成完成后统一在这里处理重写、润色、连贯性诊断和提示词调整，减少功能在不同层级之间来回跳转。
+                </div>
+                """)
 
-            # Tab 4: 连贯性分析
-            with gr.Tab("🔍 连贯性分析"):
-                coherence_viz = CoherenceVizUI(app_state)
-                coherence_tab = coherence_viz.create_ui()
+                with gr.Tabs():
+                    with gr.Tab("📝 小说重写"):
+                        rewrite_tab = create_rewrite_ui(app_state)
 
-            # Tab 5: 提示词编辑器
-            with gr.Tab("📝 提示词编辑器"):
-                prompt_editor_tab = create_prompt_editor_ui()
+                    with gr.Tab("✨ 小说润色"):
+                        polish_tab = create_polish_ui(app_state)
 
-            # Tab 6: 项目管理
-            with gr.Tab("📁 项目管理"):
-                gr.Markdown("### 我的项目")
-                gr.Markdown("💡 提示：要在单章创作中使用项目，请直接在「📝 单章创作」标签页选择项目")
+                    with gr.Tab("🔍 连贯性分析"):
+                        coherence_viz = CoherenceVizUI(app_state)
+                        coherence_tab = coherence_viz.create_ui()
+
+                    with gr.Tab("🧩 提示词编辑器"):
+                        prompt_editor_tab = create_prompt_editor_ui()
+
+            with gr.Tab("📁 项目中心"):
+                gr.Markdown("### 项目与导出")
+                gr.Markdown("这里集中处理项目列表、清理和整本导出。续写入口放在创作工作台，不再重复。")
 
                 projects_table = gr.Dataframe(
                     headers=["ID", "标题", "类型", "创建时间", "章节数"],
@@ -1518,47 +1686,59 @@ def create_main_ui():
                 project_status = gr.Textbox(label="状态", interactive=False)
 
                 gr.Markdown("---")
+                gr.Markdown("### 导出整本小说")
 
-                # 导出功能（更显眼）
-                gr.Markdown("### 📤 导出整本小说")
-                gr.Markdown("**请先选择要导出的项目，然后选择导出格式，最后点击导出按钮**")
-
-                # 获取项目列表用于导出选择框
-                export_project_choices = []
-                try:
-                    from project_manager import ProjectManager
-                    projects_list_for_export = ProjectManager.list_projects()
-                    export_project_choices = [p["title"] for p in projects_list_for_export]
-                except Exception as e:
-                    logger.warning(f"获取导出项目列表失败: {e}")
-
-                # 第一步：选择要导出的项目
-                gr.Markdown("#### 第一步：选择要导出的项目")
                 project_export_selector = gr.Dropdown(
                     choices=export_project_choices,
-                    label="📁 选择要导出的项目",
-                    info="请从下拉框中选择要导出的项目（点击刷新列表后可用）",
+                    label="选择要导出的项目",
+                    info="请先刷新列表，再选择目标项目",
                     interactive=True,
                     scale=1
                 )
 
-                # 第二步：选择导出格式和导出按钮
-                gr.Markdown("#### 第二步：选择导出格式并导出")
                 with gr.Row():
                     project_export_format = gr.Radio(
                         choices=["Word (.docx)", "文本 (.txt)", "Markdown (.md)", "HTML (.html)"],
                         value="文本 (.txt)",
-                        label="📄 导出格式",
+                        label="导出格式",
                         interactive=True,
                         scale=1
                     )
                     export_project_btn = gr.Button("📦 导出整本小说", variant="primary", scale=1, size="lg")
 
-                # 导出结果显示区域
-                export_download = gr.File(label="💾 下载文件", interactive=False)
-                export_info = gr.Markdown("**✨ 使用说明**: 1️⃣ 点击「刷新列表」→ 2️⃣ 在上方下拉框选择项目 → 3️⃣ 选择导出格式 → 4️⃣ 点击「导出整本小说」")
+                export_download = gr.File(label="下载文件", interactive=False)
+                export_info = gr.Markdown("**使用说明**：1. 点击「刷新列表」 2. 选择项目 3. 选择导出格式 4. 点击导出")
+
+            with gr.Tab("⚙️ 系统设置"):
+                gr.Markdown("### 全局配置")
+                gr.Markdown("接口、生成参数和缓存统一收口，避免与创作流程混排。")
+
+                with gr.Tabs():
+                    with gr.Tab("🌐 接口管理"):
+                        api_config_tab = create_api_config_ui()
+
+                    with gr.Tab("📝 生成参数"):
+                        params_config_tab = create_params_config_ui(app_state)
+
+                    with gr.Tab("💾 缓存管理"):
+                        cache_tab = create_cache_manager_ui(app_state)
+
+        gr.HTML("""
+        <div class="app-footer">
+            <strong>AI小说生成器 v4.5.0</strong><br>
+            版权所有 © 2026 新疆幻城网安科技有限责任公司（幻城科技）
+        </div>
+        """)
 
         # 事件绑定
+        def switch_generation_mode(mode: str):
+            """切换整本生成模式"""
+            is_auto_mode = mode == "快速模式（自动生成）"
+            return (
+                gr.update(visible=is_auto_mode),
+                gr.update(visible=not is_auto_mode)
+            )
+
         # 项目选择变化时显示项目信息并更新章节号
         def on_project_select(project_title):
             """项目选择变化时更新显示"""
@@ -1605,6 +1785,12 @@ def create_main_ui():
             except Exception as e:
                 logger.error(f"加载项目信息失败: {e}")
                 return f"❌ 加载失败: {str(e)}", 1
+
+        generation_mode.change(
+            fn=switch_generation_mode,
+            inputs=[generation_mode],
+            outputs=[auto_generation_panel, snowflake_generation_panel]
+        )
 
         project_selector.change(
             fn=on_project_select,
@@ -1782,35 +1968,6 @@ def create_main_ui():
             outputs=[project_status, export_download]
         )
 
-        # Tab 10: 系统设置
-        with gr.Tab("⚙️ 系统设置"):
-            gr.Markdown("### 🔧 全局配置")
-
-            with gr.Tabs():
-                # 子标签1: API配置
-                with gr.Tab("🌐 接口管理"):
-                    api_config_tab = create_api_config_ui()
-
-                # 子标签2: 生成参数
-                with gr.Tab("📝 生成参数"):
-                    params_config_tab = create_params_config_ui(app_state)
-
-                # 子标签3: 缓存管理
-                with gr.Tab("💾 缓存管理"):
-                    cache_tab = create_cache_manager_ui(app_state)
-
-        # 底部版权信息
-        gr.Markdown("""
-        <div style="text-align: center; padding: 15px; margin-top: 30px; border-top: 1px solid #e0e0e0; color: #666;">
-            <p style="margin: 5px 0;">AI小说生成器 v4.5.0</p>
-            <p style="margin: 5px 0; font-size: 0.9em;">版权所有 © 2026 新疆幻城网安科技有限责任公司 (幻城科技)</p>
-            <p style="margin: 5px 0; font-size: 0.8em; color: #999;">Made with ❤️ by 幻城科技</p>
-        </div>
-        """)
-
-        # 添加导出UI组件到项目管理标签
-        # 这个需要在Tab定义中添加，但由于我们已经定义了，需要重新定位
-
     return app
 
 
@@ -1861,7 +2018,9 @@ def main():
         server_port=WEB_PORT,
         share=WEB_SHARE,
         show_error=True,
-        show_api=False  # 禁用API文档以避免gradio_client的bool类型错误
+        css=MAIN_APP_CSS,
+        footer_links=[]
+        # 注意: Gradio 6.x 不支持 show_api 参数
     )
 
 

@@ -1,5 +1,19 @@
 # 依赖管理说明
 
+> 依赖基线说明
+>
+> 本文档主要描述 Python / 本地版依赖管理思路。
+> 当前仓库已经同时包含商业版前后端，商业版依赖还包括：
+>
+> - 前端：`frontend-web/package.json`
+> - 商业版后端补充依赖：`backend/requirements.txt`
+>
+> 如果你在处理商业版发布或验收，请优先同时检查：
+>
+> - `pyproject.toml`
+> - `frontend-web/package.json`
+> - `backend/requirements.txt`
+
 ## 概述
 
 本项目使用多种方式管理 Python 依赖，以适应不同的使用场景：

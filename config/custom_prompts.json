@@ -1,9 +1,11 @@
 {
   "version": "1.0",
-  "updated_at": "2026-02-08T18:36:13.089618",
+  "updated_at": "2026-04-01T23:21:28.013522",
   "templates": {
     "generation": {
-      "null": ""
+      "null": "",
+      "CodexTempPrompt5cfb41": "?????? {title}",
+      "test_prompt": "This is a test prompt content"
     }
   }
 }

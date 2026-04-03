@@ -1,0 +1,28 @@
+# AI Novel Generator 5.0 - Backend Dependencies
+
+# Web框架
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# 数据验证
+pydantic>=2.5.0
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+
+# 跨域支持
+python-cors>=1.0.0
+
+# 现有依赖
+gradio>=4.0.0
+openai>=1.0.0
+anthropic>=0.7.0
+requests>=2.31.0
+aiohttp>=3.9.0
+
+# 邮件发送
+aiosmtplib>=3.0.0
+
+# 工具库
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
