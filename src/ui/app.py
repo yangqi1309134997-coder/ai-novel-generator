@@ -82,7 +82,7 @@ def setup_logging():
     # 配置根日志记录器
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
-    root_logger.addHandler(console_handler)
+    # 控制台日志由 run.py 统一管理，此处仅输出到文件
     root_logger.addHandler(file_handler)
     root_logger.addHandler(debug_handler)
     root_logger.addHandler(error_handler)
@@ -114,13 +114,150 @@ WEB_HOST = os.getenv("NOVEL_TOOL_HOST", "0.0.0.0")
 WEB_PORT = int(os.getenv("NOVEL_TOOL_PORT", os.getenv("PORT", "7860")))
 WEB_SHARE = os.getenv("NOVEL_TOOL_SHARE", "false").lower() in ("1", "true", "yes")
 
+# ==================== 自定义主题 ====================
+
+from src.ui.theme import CUSTOM_THEME
+
 MAIN_APP_CSS = """
+/* ====== 全局容器 ====== */
 .gradio-container {
     background:
-        radial-gradient(circle at top right, rgba(15, 118, 110, 0.12), transparent 30%),
-        linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+        radial-gradient(circle at top right, rgba(13, 148, 136, 0.08), transparent 35%),
+        linear-gradient(180deg, #f0f4f8 0%, #e2e8f0 100%) !important;
+    color: #1e293b !important;
+    font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif !important;
 }
 
+/* ====== 标签页 ====== */
+.tabs {
+    border: none !important;
+}
+.tab-nav {
+    background: #ffffff !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    border-radius: 12px 12px 0 0 !important;
+    padding: 6px 8px 0 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+.tab-nav button {
+    color: #475569 !important;
+    font-weight: 500 !important;
+    font-size: 0.95rem !important;
+    padding: 10px 18px !important;
+    border-radius: 10px 10px 0 0 !important;
+    transition: all 0.2s ease !important;
+}
+.tab-nav button.selected {
+    color: #0d9488 !important;
+    background: linear-gradient(180deg, rgba(13, 148, 136, 0.08), transparent) !important;
+    border-bottom: 3px solid #0d9488 !important;
+    font-weight: 600 !important;
+}
+.tab-nav button:hover:not(.selected) {
+    color: #0f766e !important;
+    background: rgba(13, 148, 136, 0.04) !important;
+}
+
+/* ====== 输入框 ====== */
+input[type="text"], input[type="number"], textarea, select {
+    background: #ffffff !important;
+    color: #1e293b !important;
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    font-size: 0.95rem !important;
+}
+input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
+    border-color: #0d9488 !important;
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12) !important;
+    outline: none !important;
+}
+textarea {
+    min-height: 80px !important;
+    line-height: 1.6 !important;
+}
+input::placeholder, textarea::placeholder {
+    color: #94a3b8 !important;
+}
+
+/* ====== 按钮 ====== */
+.primary-btn, .btn-primary {
+    background: linear-gradient(135deg, #0d9488, #0f766e) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    padding: 10px 24px !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 4px 12px rgba(13, 148, 136, 0.25) !important;
+}
+.primary-btn:hover, .btn-primary:hover {
+    background: linear-gradient(135deg, #0f766e, #115e59) !important;
+    box-shadow: 0 6px 16px rgba(13, 148, 136, 0.35) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* ====== 下拉框 ====== */
+.gr-dropdown {
+    background: #ffffff !important;
+    color: #1e293b !important;
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+}
+
+/* ====== 标签文字 ====== */
+label, .gr-input-label, .gr-radio-label {
+    color: #1e293b !important;
+    font-weight: 600 !important;
+    font-size: 0.95rem !important;
+}
+.gr-input-info {
+    color: #64748b !important;
+    font-size: 0.85rem !important;
+}
+
+/* ====== Markdown 文字 ====== */
+.markdown-text {
+    color: #1e293b !important;
+    line-height: 1.7 !important;
+}
+.markdown-text h1, .markdown-text h2, .markdown-text h3,
+.markdown-text h4, .markdown-text h5, .markdown-text h6 {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+}
+.markdown-text p {
+    color: #334155 !important;
+}
+
+/* ====== 手风琴 ====== */
+.accordion {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    background: #ffffff !important;
+}
+.accordion-button {
+    color: #1e293b !important;
+    font-weight: 600 !important;
+}
+
+/* ====== 复选框 ====== */
+.gr-checkbox-label {
+    color: #1e293b !important;
+}
+
+/* ====== 数据框 ====== */
+.dataframe {
+    color: #1e293b !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+}
+.dataframe th {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 600 !important;
+}
+
+/* ====== 自定义 Hero 区域 ====== */
 .app-shell {
     display: flex;
     flex-direction: column;
@@ -129,10 +266,10 @@ MAIN_APP_CSS = """
 
 .app-hero {
     padding: 28px 32px;
-    border-radius: 24px;
+    border-radius: 20px;
     background: linear-gradient(135deg, #0f172a 0%, #134e4a 100%);
     color: #f8fafc;
-    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.15);
 }
 
 .app-hero__eyebrow {
@@ -140,20 +277,22 @@ MAIN_APP_CSS = """
     font-size: 13px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: rgba(226, 232, 240, 0.78);
+    color: rgba(226, 232, 240, 0.85);
 }
 
 .app-hero h1 {
     margin: 0;
-    font-size: 2.4rem;
-    line-height: 1.1;
+    font-size: 2.2rem;
+    line-height: 1.15;
+    font-weight: 800;
 }
 
 .app-hero p {
     margin: 14px 0 0;
     max-width: 880px;
     font-size: 1rem;
-    color: rgba(241, 245, 249, 0.88);
+    color: rgba(241, 245, 249, 0.92);
+    line-height: 1.7;
 }
 
 .app-quick-grid {
@@ -164,11 +303,14 @@ MAIN_APP_CSS = """
 
 .app-quick-card {
     padding: 18px 20px;
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.88);
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+    transition: box-shadow 0.2s ease;
+}
+.app-quick-card:hover {
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.1);
 }
 
 .app-quick-card strong {
@@ -186,10 +328,11 @@ MAIN_APP_CSS = """
 
 .app-note {
     padding: 16px 18px;
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.76);
-    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 14px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
     color: #334155;
+    line-height: 1.6;
 }
 
 .app-note strong {
@@ -199,9 +342,9 @@ MAIN_APP_CSS = """
 .mode-summary {
     margin-bottom: 14px;
     padding: 16px 18px;
-    border-radius: 18px;
-    background: linear-gradient(135deg, rgba(255, 251, 235, 0.95), rgba(240, 253, 250, 0.95));
-    border: 1px solid rgba(245, 158, 11, 0.22);
+    border-radius: 14px;
+    background: linear-gradient(135deg, #fffbeb, #f0fdfa);
+    border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
 .mode-summary p {
@@ -216,6 +359,7 @@ MAIN_APP_CSS = """
 
 .workspace-panel h3 {
     margin-top: 0;
+    color: #0f172a !important;
 }
 
 .app-footer {
@@ -1986,10 +2130,8 @@ def main():
             migrated = False
             for provider in config.get("providers", []):
                 if "outline_max_tokens" in provider:
-                    # 如果max_tokens较小，使用outline_max_tokens的值
                     if provider.get("max_tokens", 4000) < provider.get("outline_max_tokens", 8000):
                         provider["max_tokens"] = provider["outline_max_tokens"]
-                    # 删除outline_max_tokens字段
                     del provider["outline_max_tokens"]
                     migrated = True
                     logger.info(f"迁移配置：删除outline_max_tokens字段，使用统一的max_tokens={provider['max_tokens']}")
@@ -2001,17 +2143,32 @@ def main():
         except Exception as e:
             logger.warning(f"迁移配置文件失败: {e}")
 
-    # 初始化提示词系统
+    print("[1/3] 正在加载提示词系统...", flush=True)
     app_state.init_prompt_system()
+    print("      提示词系统加载完成", flush=True)
 
     # 自动加载API配置
     if not app_state.load_api_config():
-        logger.info("未找到API配置，请在「系统设置 > 接口管理」中配置")
+        print("      未找到API配置，首次使用请在「系统设置 > 接口管理」中配置", flush=True)
+    else:
+        print("      API配置加载成功", flush=True)
 
-    # 创建UI
+    print("[2/3] 正在构建界面...", flush=True)
     app = create_main_ui()
+    print("      界面构建完成", flush=True)
 
-    # 启动
+    print("[3/3] 正在启动服务器...", flush=True)
+    print(flush=True)
+    print("=" * 60, flush=True)
+    print(f"  服务已启动! 请在浏览器中访问:", flush=True)
+    print(flush=True)
+    print(f"  >>> http://{WEB_HOST}:{WEB_PORT} <<<", flush=True)
+    print(flush=True)
+    print("=" * 60, flush=True)
+    print(flush=True)
+    print("提示: 按 Ctrl+C 可停止服务器", flush=True)
+    print(flush=True)
+
     logger.info(f"启动Web服务器: {WEB_HOST}:{WEB_PORT}")
     app.launch(
         server_name=WEB_HOST,
@@ -2019,8 +2176,8 @@ def main():
         share=WEB_SHARE,
         show_error=True,
         css=MAIN_APP_CSS,
+        theme=CUSTOM_THEME,
         footer_links=[]
-        # 注意: Gradio 6.x 不支持 show_api 参数
     )
 
 
